@@ -19,7 +19,10 @@ import numpy as np
 from clustering import DECluster
 
 
-n_estimators = 100
+in_fn = sys.argv[1]
+classifier = sys.argv[2]
+n_estimators = int(sys.argv[3])
+
 n_b_estimators = 10
 
 
@@ -36,11 +39,11 @@ class GradientBoostingClassifierWithCoef(GradientBoostingClassifier):
 
 
 classifiers = {'forest': RandomForestClassifier(n_estimators=n_estimators, min_samples_split=2, n_jobs=1),
-               'forest_with_coef': RandomForestClassifierWithCoef(n_estimators=10, min_samples_leaf=5,
+               'forest_with_coef': RandomForestClassifierWithCoef(n_estimators=n_estimators,
                                                                   min_samples_split=2, n_jobs=-1),
                'tree': tree.DecisionTreeClassifier(),
-               'forest_bagging': BaggingClassifier(base_estimator=RandomForestClassifier(n_estimators=n_estimators,
-                                                                                         min_samples_split=2, n_jobs=1),
+               'forest_bagging': BaggingClassifier(base_estimator=RandomForestClassifierWithCoef
+                                                   (n_estimators=n_estimators, min_samples_split=2, n_jobs=1),
                                                    n_estimators=n_b_estimators, max_samples=1.0, max_features=1.0,
                                                    bootstrap=True, bootstrap_features=True, oob_score=False, n_jobs=1,
                                                    random_state=True, verbose=0),
@@ -157,7 +160,6 @@ class DEFinder(object):
         y_1 = clf_1.predict(self.features)
         y_2 = clf_2.predict(self.features)
 
-
         plt.figure()
         plt.scatter(self.features, self.target, c="k", label="data")
         plt.plot(self.features, y_1, c="g", label="max_depth=2", linewidth=2)
@@ -208,7 +210,6 @@ class DEFinder(object):
         except Exception, error:
             sys.stderr.write('\nGot error: %s. Choose another classifier.\n' % error)
 
-
     def get_rfecv_chosen_feature_names(self):
         try:
             self.rfecv_chosen_feature_names = dict([(self.feat_names[i], self.rfecv.ranking_[i])
@@ -223,17 +224,18 @@ class DEFinder(object):
         sys.stdout.write('\n'.join('%s\t%s\t\t%s' % (n, i, self.rfecv_chosen_feature_names[i])
                                    for n, i in enumerate(sorted(self.rfecv_chosen_feature_names,
                                                                 key=self.rfecv_chosen_feature_names.get))))
+    def save_rfecv_plot(self, classifier=None, scoring=None, n_estimators=None):
+        filename = '%s_RFECV_%s_cv_%s_estimators' % (classifier, str(scoring), n_estimators)
 
-    def save_rfecv_plot(self, filename):
         try:
             fig = plt.figure(figsize=(20, 20), dpi=100)
             plt.rc("font", size=20)
+            plt.title("Recursive feature elimination on %s" % classifier)
             plt.xlabel("Number of features selected")
             plt.ylabel("Cross validation score (nb of correct classifications)")
             plt.plot(range(1, len(self.rfecv.grid_scores_) + 1), self.rfecv.grid_scores_, linewidth=4.0, color='green')
             plt.grid()
             plt.savefig('%s.png' % filename, format='png')
-            # plt.show()
         except Exception, error:
             sys.stderr.write('\nGot error: %s. You have to call recursive_feature_elimination method first.' % error)
 
@@ -284,31 +286,33 @@ class DEFinder(object):
 
 
 
-def run_rfecv(de_finder):
+def run_rfecv(de_finder, n_estimators, n_b_estimators=None, scoring=None):
         scoring = de_finder.false_precision_scorer
         de_finder.recursive_feature_elimination(scoring=scoring, estimator=classifiers[classifier])
-        de_finder.save_rfecv_plot('%s_RFECV_%s_cv_5_10estimators' % (classifier, str(scoring)))
+        de_finder.save_rfecv_plot(classifier, scoring, n_estimators)
         sys.stdout.write('False Precision\nBest chosen features: \n')
         de_finder.show_rfecv_chosen_feature_names()
 
         scoring = de_finder.false_recall_scorer
         de_finder.recursive_feature_elimination(scoring=scoring, estimator=classifiers[classifier])
-        de_finder.save_rfecv_plot('%s_RFECV_%s_cv_3_10estimators' % (classifier, str(scoring)))
+        de_finder.save_rfecv_plot(classifier, scoring, n_estimators)
         sys.stdout.write('False Recall\nBest chosen features: \n')
         de_finder.show_rfecv_chosen_feature_names()
         sys.stdout.write('\nAll done!... at %s \n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
 
 
-def _runall(fn, classifier, n_estimators=n_estimators):
+def _runall(fn, classifier, n_estimators=n_estimators, n_b_estimators=None):
         de_finder = DEFinder(fn)
         sys.stdout.write('Training model... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
 
         de_finder.train_model(classifier=classifier)
         sys.stdout.write('Evaluating model %s... at %s\n' % (classifier, strftime("%a, %d %b %Y %H:%M:%S\n", gmtime())))
-        de_finder.evaluate_model_cv(folds=3)
 
-        de_finder.plot_most_informative_features('%s_most_inform_feats_std_gs_markup_cv_5_%s_estimators' %
-                                                 (classifier, n_estimators), how_many=50, threshold=0.0)
+        de_finder.evaluate_model_cv(folds=5)
+        de_finder.plot_most_informative_features('%s_most_inform_feats_std_gs_markup_cv_5_%s_%s_estimators' %
+                                                 (classifier, n_estimators, n_b_estimators),
+                                                 how_many=100, threshold=0.0)
+        run_rfecv(de_finder, n_estimators, n_b_estimators)
 
 
 def _profile_it(fn, classifier, n_estimators):
@@ -319,8 +323,6 @@ def _profile_it(fn, classifier, n_estimators):
 
 
 if __name__ == '__main__':
-    in_fn = sys.argv[1]
-    classifier = sys.argv[2]
     _runall(in_fn, classifier=classifier, n_estimators=n_estimators)
 
 
