@@ -17,12 +17,11 @@ import matplotlib.pyplot as plt
 from numpy import *
 import numpy as np
 from clustering import DECluster
-
+from collections import defaultdict
 
 in_fn = sys.argv[1]
-classifier = sys.argv[2]
-n_estimators = int(sys.argv[3])
 
+n_estimators = 400
 n_b_estimators = 10
 
 
@@ -55,27 +54,21 @@ classifiers = {'forest': RandomForestClassifier(n_estimators=n_estimators, min_s
                                                      random_state=True, verbose=0),
                'bootstrap': Bootstrap(10013, n_iter=3, train_size=0.49, test_size=0.49, random_state=None,
                                       n_bootstraps=None),
-               'feature_selection': Pipeline([
-                   ('feature_selection', LinearSVC(penalty="l1", dual=False)),
-                   ('classification', RandomForestClassifierWithCoef(n_estimators=n_estimators, min_samples_split=2,
-                                                                     n_jobs=1))]),
                'linear_svc': LinearSVC(penalty="l1", dual=False),
-               'extra_tree': ExtraTreesClassifier(n_estimators=n_estimators,  random_state=0),
                'gradient': GradientBoostingClassifier(loss='deviance', learning_rate=0.1, n_estimators=n_estimators,
                                                       subsample=1.0, min_samples_split=2, min_samples_leaf=1,
                                                       max_depth=3, init=None, random_state=None, max_features=None,
-                                                      verbose=0, max_leaf_nodes=None, warm_start=False),
-               'regression_tree': tree.DecisionTreeRegressor(),
-               'decision_bagging': tree.DecisionTreeClassifier(),
-               'regression_bagging': tree.DecisionTreeRegressor(max_depth=2)
+                                                      verbose=0, max_leaf_nodes=None, warm_start=False)
                }
 
 
 class DEFinder(object):
-    def __init__(self, fn, separator=',', target_feat_name='childCheck', id_name='id'):
+    def __init__(self):
         self.classifier = None
-        self.target, self.features, self.feat_names, self.ids = \
-            DECluster.read_features(fn, target_feat_name=target_feat_name, separator=separator, id_name=id_name)
+        self.features = None
+        self.ids = None
+        self.feat_names = None
+        self.target = None
         self.bootstrap_informative_features = dict()
         self.false_precision_scorer = make_scorer(precision_score, labels=None, pos_label=0, average='weighted')
         self.true_precision_scorer = make_scorer(precision_score, labels=None, pos_label=1, average='weighted')
@@ -98,7 +91,6 @@ class DEFinder(object):
         else:
             self.feature_importances_ = np.mean([tree.feature_importances_ for
                                                         tree in self.classifier.estimators_], axis=0)
-
 
     def rank_features(self, how_many=110):
         self.get_important_feats()
@@ -130,7 +122,6 @@ class DEFinder(object):
         except Exception, error:
             sys.stderr.write('\nGot error: %s. Features will be plotted without std.\n' % error)
 
-
     def plot_most_informative_features(self, filename, how_many=110, threshold=0.0):
             self.get_features_std()
             self.rank_features(how_many=how_many)
@@ -148,32 +139,23 @@ class DEFinder(object):
                                            for n in self.indices[0:how_many]], rotation=30, fontsize=6)
             plt.xlim([-1, how_many])
             plt.savefig('%s.png' % filename, format='png')
-            # plt.show()
-
-    def plot_tree_regression(self):
-
-        clf_1 = tree.DecisionTreeRegressor(max_depth=2)
-        clf_2 = tree.DecisionTreeRegressor(max_depth=5)
-        clf_1.fit(self.features, self.target)
-        clf_2.fit(self.features, self.target)
-
-        y_1 = clf_1.predict(self.features)
-        y_2 = clf_2.predict(self.features)
-
-        plt.figure()
-        plt.scatter(self.features, self.target, c="k", label="data")
-        plt.plot(self.features, y_1, c="g", label="max_depth=2", linewidth=2)
-        plt.plot(self.features, y_2, c="r", label="max_depth=5", linewidth=2)
-        plt.xlabel("data")
-        plt.ylabel("target")
-        plt.title("Decision Tree Regression")
-        plt.legend()
-        plt.show()
-
-
 
     def predict(self, samples):
         self.predictions = [p for p in self.classifier.predict(samples)]
+
+    def map_predicted_to_ids(self, what=False):
+        self.mapped_predictions = defaultdict(list)
+        for n, i in enumerate(self.predictions):
+            if i == what:
+                self.mapped_predictions[self.ids[n]] = self.features[n]
+
+    def save_predictions(self, outfn):
+        headers = ['id']
+        headers.extend([f for f in self.feat_names])
+        with open(outfn, 'wb') as outfile:
+            outfile.write(';'.join(headers) + '\n')
+            outfile.write('\n'.join('%s;%s' % (id, ';'.join(str(f) for f in feats))
+                                    for id, feats in self.mapped_predictions.iteritems()))
 
     def predict_probs(self, samples):
         self.predicted_probs = [[index + 1, x[1]]
@@ -224,13 +206,14 @@ class DEFinder(object):
         sys.stdout.write('\n'.join('%s\t%s\t\t%s' % (n, i, self.rfecv_chosen_feature_names[i])
                                    for n, i in enumerate(sorted(self.rfecv_chosen_feature_names,
                                                                 key=self.rfecv_chosen_feature_names.get))))
+
     def save_rfecv_plot(self, classifier=None, scoring=None, n_estimators=None):
         filename = '%s_RFECV_%s_cv_%s_estimators' % (classifier, str(scoring), n_estimators)
 
         try:
             fig = plt.figure(figsize=(20, 20), dpi=100)
             plt.rc("font", size=20)
-            plt.title("Recursive feature elimination on %s" % classifier)
+            plt.title("Recursive feature elimination on Random Forest: %s" % scoring)
             plt.xlabel("Number of features selected")
             plt.ylabel("Cross validation score (nb of correct classifications)")
             plt.plot(range(1, len(self.rfecv.grid_scores_) + 1), self.rfecv.grid_scores_, linewidth=4.0, color='green')
@@ -285,34 +268,36 @@ class DEFinder(object):
             self.feat_names = cPickle.load(infile)
 
 
-
-def run_rfecv(de_finder, n_estimators, n_b_estimators=None, scoring=None):
+def run_rfecv(de_finder, n_estimators):
         scoring = de_finder.false_precision_scorer
+        scoring_short = 'False precision'
         de_finder.recursive_feature_elimination(scoring=scoring, estimator=classifiers[classifier])
-        de_finder.save_rfecv_plot(classifier, scoring, n_estimators)
+        de_finder.save_rfecv_plot(classifier, scoring_short, n_estimators)
         sys.stdout.write('False Precision\nBest chosen features: \n')
         de_finder.show_rfecv_chosen_feature_names()
 
         scoring = de_finder.false_recall_scorer
+        scoring_short = 'False recall'
         de_finder.recursive_feature_elimination(scoring=scoring, estimator=classifiers[classifier])
-        de_finder.save_rfecv_plot(classifier, scoring, n_estimators)
+        de_finder.save_rfecv_plot(classifier, scoring_short, n_estimators)
         sys.stdout.write('False Recall\nBest chosen features: \n')
         de_finder.show_rfecv_chosen_feature_names()
         sys.stdout.write('\nAll done!... at %s \n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
 
 
-def _runall(fn, classifier, n_estimators=n_estimators, n_b_estimators=None):
-        de_finder = DEFinder(fn)
+def _runall(fn, classifier, n_estimators=n_estimators, n_b_estimators=None, cv_folds=3):
+        de_finder = DEFinder()
+        de_finder.target, de_finder.features, de_finder.feat_names, de_finder.ids = \
+            DECluster.read_features(fn, target_feat_name='childCheck', separator=',', id_name='id')
         sys.stdout.write('Training model... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
 
         de_finder.train_model(classifier=classifier)
         sys.stdout.write('Evaluating model %s... at %s\n' % (classifier, strftime("%a, %d %b %Y %H:%M:%S\n", gmtime())))
 
-        de_finder.evaluate_model_cv(folds=5)
-        de_finder.plot_most_informative_features('%s_most_inform_feats_std_gs_markup_cv_5_%s_%s_estimators' %
-                                                 (classifier, n_estimators, n_b_estimators),
+        de_finder.evaluate_model_cv(folds=cv_folds)
+        de_finder.plot_most_informative_features('%s_most_inform_feats_std_gs_markup_cv_%s_%s_%s_estimators' %
+                                                 (classifier, cv_folds, n_estimators, n_b_estimators),
                                                  how_many=100, threshold=0.0)
-        run_rfecv(de_finder, n_estimators, n_b_estimators)
 
 
 def _profile_it(fn, classifier, n_estimators):
@@ -323,7 +308,18 @@ def _profile_it(fn, classifier, n_estimators):
 
 
 if __name__ == '__main__':
-    _runall(in_fn, classifier=classifier, n_estimators=n_estimators)
+    de_finder = DEFinder()
+    sys.stdout.write('Loading data... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
+    de_finder.load_model(
+        '/media/darya/Data/LingDir/treebank/modellib/forest_with_coef_random_forest_features_from_gs_markup',
+        '/media/darya/Data/LingDir/treebank/modellib/forest_with_coef_random_forest_features_from_gs_markup.features')
+
+    de_finder.target, de_finder.features, de_finder.feat_names, de_finder.ids = \
+            DECluster.read_features(in_fn, target_feat_name='childCheck', delimiter=',', id_name='id')
+    sys.stdout.write('Predicting... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
+    de_finder.predict(de_finder.features)
+    de_finder.map_predicted_to_ids(what=False)
+    de_finder.save_predictions('/media/darya/Data/LingDir/treebank/saved_predictions.csv')
 
 
 
