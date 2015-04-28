@@ -28,18 +28,15 @@ class Token(object):
         self.lemma = token[8]
         self.lemma = self.lemma
 
-
     def get_value(self, value):
         if value == '' or value == 'h': return 00
         else: return int(value)
 
-
     def check_tok(self, value):
             a = lambda x: x in ['0', '2', '3', '4', '5']
-            # fl = re.compile(r"'0'|'2'|'3'|'4'|'5'")
-            # a = fl.search(value)
             if a(value): return True
             else: return False
+
 
 class SentenceRule(object):
     """
@@ -74,11 +71,9 @@ class SentenceRule(object):
             self.pairs.extend([pair for pair in self.true_pairs])
         return self.pairs
 
-
     def convert_gs_attribs(self):
         self.true_pairs = [[self.head, self.child.__setattr__('check', True)]
                                     for (self.head, self.child) in self.true_pairs]
-
 
     def get_dep_pairs_by_POS(self, POSfeature, POSasWhat):
         """Вернуть все пары зависимостей для указанного грам.тега и роли токена (head / child),
@@ -107,8 +102,6 @@ class SentenceRule(object):
                             self.dep_pairs_by_POS.append([self.head, self.child])
         return self.dep_pairs_by_POS
 
-
-
     def position(self, head, child):
         """Вернуть позицию ребёнка по отношению к главному слову
         """
@@ -116,16 +109,15 @@ class SentenceRule(object):
         elif head.WID > child.WID: return 'post-pos'
 
 
-class Rule(SentenceRule):
+class CommonRule(object):
     """Класс для описания связи <head - child> из данных типа <SentenceRule>."""
-    def __init__(self, dep_pair, sentence, tags=None):
-        SentenceRule.__init__(self, sentence)
+    def __init__(self, dep_pair, tags=None):
         self.dep_pair = dep_pair
         self.head, self.child = self.dep_pair
         self.id = '%s.%s.%s' % (self.head.SID, self.head.WID, self.child.WID)
         self.headToken = self.head.token
         self.childToken = self.child.token
-        self.sent = self.head.sent
+        self.sentence = self.head.sent
         self.child_post_pos = self.check_position(what='post-pos')
         self.child_pre_pos = self.check_position(what='pre-pos')
         self.distance_in_words = self.distance()
@@ -153,19 +145,14 @@ class Rule(SentenceRule):
         if tags is not None:
             self.add_gram_attribs(tags)
 
-
-    def add_gram_attribs(self, tags):
-        head_tags = dict([(tag, True) for tag in self.head.gram.split(',')])
-        child_tags = dict([(tag, True) for tag in self.child.gram.split(',')])
+    def add_gram_attribs(self, tags, tag_separator=','):
+        head_tags = dict([(tag, True) for tag in self.head.gram.split(tag_separator)])
+        child_tags = dict([(tag, True) for tag in self.child.gram.split(tag_separator)])
         for tag in tags:
                 if tag in head_tags: self.__setattr__('HEAD_is_%s' % tag, True)
                 elif tag not in head_tags: self.__setattr__('HEAD_is_%s' % tag, False)
                 if tag in child_tags: self.__setattr__('CHILD_is_%s' % tag, True)
                 elif tag not in child_tags: self.__setattr__('CHILD_is_%s' % tag, False)
-
-
-    def get_gram_tags(self, what):
-        return set(what.gram.split(','))
 
     def check_root(self, what):
         if what.head == 0 or what.head == '0':
@@ -190,7 +177,6 @@ class Rule(SentenceRule):
                                                and word.head != '' and word.head != 00)
         return self.words_at_positions(what=what, bit=bit, condition=condition)
 
-
     def words_after(self, what=None, bit=None):
         if what is not None:
             condition = lambda word, what: word.head == what.WID \
@@ -200,7 +186,6 @@ class Rule(SentenceRule):
              condition = lambda word, what: (word.WID > self.head.WID and word.WID > self.child.WID
                                                  and word.head != '' and word.head != 00)
         return self.words_at_positions(what=what, bit=bit, condition=condition)
-
 
     def words_at_positions(self, what=None,  bit=None, condition=None):
         words = [word for word in self.sentence if condition(word, what)]
@@ -219,7 +204,6 @@ class Rule(SentenceRule):
                                                 and word.head != '' and word.head != 00)
         return self.words_at_positions(what=what, bit=bit, condition=condition)
 
-
     def words_dependencies(self, what=None, bit=None, how=None):
         condition = lambda  word: word.head == what.WID
         if how == 'between':
@@ -233,7 +217,6 @@ class Rule(SentenceRule):
         elif words != [] and bit is None: return words
         else: return False
 
-
     def sentence_len_chars(self):
         condition  = lambda  x: 1 > 0
         return self.len_chars(condition=condition)
@@ -245,7 +228,6 @@ class Rule(SentenceRule):
     def check_position(self, what=None):
         if what == self.position(self.head, self.child): return True
         else: return False
-
 
     def distance(self, chars=False):
         if chars is False:
@@ -262,13 +244,11 @@ class Rule(SentenceRule):
             return True
         else: return False
 
-
     def check_for_head(self, what):
         condition = lambda what, word:  word.WID == what.head
         if what.WID in [word.WID for word in self.sentence if condition(what, word)]:
             return True
         else: return False
-
 
     def get_pos(self, token, *args):
         for arg in args:
@@ -308,25 +288,24 @@ def read_file(filename, SyntAutom=None, tags=None):
     else: return results
 
 
-
-
-def build_features(in_fn, featsdir, docname='out_feats_14.csv'):
+def build_features(in_fn):
 
     results, tags, links = read_file(in_fn, tags=True)
     token_sentences = [[Token(feat, sent) for feat in results[sent]] for n, sent in enumerate(results)]
 
-    genius_move = [Rule(dep_pair, SentenceRule(sentence).sentence, tags)
+    genius_move = [CommonRule(dep_pair, tags)
                    for sentence in token_sentences
                    for dep_pair in SentenceRule(sentence).get_pairs('all')]
 
+    return genius_move
+
+
+def save_extracted_feats(outfn, outdir, results):
     condition = lambda x, y: (x not in y)
     separator = ','
 
-    genius_move = enumerate(genius_move)
-
-    with codecs.open(os.path.join(featsdir, docname), 'w') as outfile:
-        for n, coup_de_genie in genius_move:
-            try:
+    with codecs.open(os.path.join(outdir, outfn), 'w') as outfile:
+        for n, coup_de_genie in enumerate(results):
                 keys = coup_de_genie.__dict__.keys()
                 values = coup_de_genie.__dict__.values()
                 if n == 0: outfile.write((separator.join([a for a in keys
@@ -334,12 +313,9 @@ def build_features(in_fn, featsdir, docname='out_feats_14.csv'):
                 outfile.write(separator.join([str(b) for (a, b)
                                               in zip(keys, values)
                                               if condition(a, attribs_to_ignore)]) + '\n')
-            except Exception, error:
-                print error, a, b
 
 
-
-def _profile_it(in_fn, featsdir, docname=None):
+def _profile_it(in_fn, featsdir, docname='out_feats_profile.csv'):
     import cProfile
     import pstats
     from pycallgraph import PyCallGraph
@@ -349,13 +325,15 @@ def _profile_it(in_fn, featsdir, docname=None):
     c = pstats.Stats('cProfile.tmp')
     c.sort_stats('ncalls').print_stats(50)
     with PyCallGraph(output=GraphvizOutput()):
-            build_features(in_fn, featsdir)
+            build_features(in_fn)
 
 
 if __name__ == '__main__':
     in_fn = sys.argv[1]
     featsdir = sys.argv[2]
-    build_features(in_fn, featsdir, docname='out_feats_15.csv')
+    docname = 'out_feats_15.csv'
+    results = build_features(in_fn)
+    save_extracted_feats(outdir=featsdir, outfn=docname, results=results)
 
 
 
