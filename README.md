@@ -19,9 +19,11 @@ where
 
 2) Train model / evaluate model  (model.py)
 
-python model.py classifier outfilename
+python model.py -c classifier -o outfilename -m train
 
 3) Process corpus with trained or loaded model (model.py)
+
+python model.py -c classifier -o outfilename -m test
 
 
 
