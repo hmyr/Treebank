@@ -256,6 +256,34 @@ class CommonRule(object):
         else: return False
 
 
+class ChildRule(CommonRule):
+    def __init__(self, dep_pair,  tags=None):
+        CommonRule.__init__(self, dep_pair, tags=None)
+        self.dep_pair = dep_pair
+        self.head, self.child = self.dep_pair
+        self.id = '%s.%s.%s' % (self.head.SID, self.head.WID, self.child.WID)
+        self.headToken = self.head.token
+        self.childToken = self.child.token
+        self.sentence = self.head.sent
+        self.child_head_is_void = self.check_is_void(self.child.head)
+        self.sentence_length_in_words = len(self.sentence)
+        self.sentence_length_in_chars = self.sentence_len_chars()
+        self.child_has_children = self.check_for_children(self.child)
+        self.child_is_root = self.check_root(self.child)
+        self.childCheck = self.child.check
+        if tags is not None:
+            self.add_gram_attribs(tags, what='CHILD')
+
+    def add_gram_attribs(self, tags, tag_separator=',', what=None):
+        if what == 'HEAD':
+            what_tags = dict([(tag, True) for tag in self.head.gram.split(tag_separator)])
+        elif what == 'CHILD':
+            what_tags = dict([(tag, True) for tag in self.child.gram.split(tag_separator)])
+        for tag in tags:
+                if tag in what_tags: self.__setattr__('%s_is_%s' % (what, tag), True)
+                elif tag not in what_tags: self.__setattr__('%s_is_%s' % (what, tag), False)
+
+
 def read_file(filename, SyntAutom=None, tags=None):
     with open(filename, 'rb') as infile:
         csv_reader = csv.DictReader(infile, delimiter=';')
@@ -288,14 +316,14 @@ def read_file(filename, SyntAutom=None, tags=None):
     else: return results
 
 
-def build_features(in_fn):
+def build_features(in_fn, param='all'):
 
     results, tags, links = read_file(in_fn, tags=True)
     token_sentences = [[Token(feat, sent) for feat in results[sent]] for n, sent in enumerate(results)]
 
     genius_move = [CommonRule(dep_pair, tags)
                    for sentence in token_sentences
-                   for dep_pair in SentenceRule(sentence).get_pairs('all')]
+                   for dep_pair in SentenceRule(sentence).get_pairs(param)]
 
     return genius_move
 
@@ -331,8 +359,9 @@ def _profile_it(in_fn, featsdir, docname='out_feats_profile.csv'):
 if __name__ == '__main__':
     in_fn = sys.argv[1]
     featsdir = sys.argv[2]
-    docname = 'out_feats_15.csv'
-    results = build_features(in_fn)
+    docname = sys.argv[3]
+    param = sys.argv[4]
+    results = build_features(in_fn, param=param)
     save_extracted_feats(outdir=featsdir, outfn=docname, results=results)
 
 
