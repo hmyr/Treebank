@@ -1,14 +1,12 @@
 # -*- coding: utf-8 -*-
 
 import cPickle, sys, csv
-from sklearn.ensemble import RandomForestClassifier, BaggingClassifier, \
-    ExtraTreesClassifier, GradientBoostingClassifier
+from sklearn.ensemble import RandomForestClassifier, BaggingClassifier, GradientBoostingClassifier
 
 from sklearn import tree
 from sklearn.svm import LinearSVC
 from sklearn.cross_validation import Bootstrap
 from sklearn import cross_validation
-from sklearn.pipeline import Pipeline
 from sklearn.metrics import (classification_report,  confusion_matrix,
                              precision_score, make_scorer, recall_score)
 from time import gmtime, strftime
@@ -18,6 +16,7 @@ from numpy import *
 import numpy as np
 from clustering import DECluster
 from collections import defaultdict
+import argparse
 
 in_fn = sys.argv[1]
 
@@ -285,10 +284,10 @@ def run_rfecv(de_finder, n_estimators):
         sys.stdout.write('\nAll done!... at %s \n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
 
 
-def _runall(fn, classifier, n_estimators=n_estimators, n_b_estimators=None, cv_folds=3):
+def _runall(in_fn, classifier, n_estimators=n_estimators, n_b_estimators=None, cv_folds=3):
         de_finder = DEFinder()
         de_finder.target, de_finder.features, de_finder.feat_names, de_finder.ids = \
-            DECluster.read_features(fn, target_feat_name='childCheck', separator=',', id_name='id')
+            DECluster.read_features(in_fn, target_feat_name='childCheck', delimiter=',', id_name='id')
         sys.stdout.write('Training model... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
 
         de_finder.train_model(classifier=classifier)
@@ -309,17 +308,18 @@ def _profile_it(fn, classifier, n_estimators):
 
 if __name__ == '__main__':
     de_finder = DEFinder()
+    modelpath = sys.argv[1]
+    output = sys.argv[2]
     sys.stdout.write('Loading data... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
-    de_finder.load_model(
-        '/media/darya/Data/LingDir/treebank/modellib/forest_with_coef_random_forest_features_from_gs_markup',
-        '/media/darya/Data/LingDir/treebank/modellib/forest_with_coef_random_forest_features_from_gs_markup.features')
+    de_finder.load_model(modelpath, modelpath + '.features')
 
     de_finder.target, de_finder.features, de_finder.feat_names, de_finder.ids = \
             DECluster.read_features(in_fn, target_feat_name='childCheck', delimiter=',', id_name='id')
+
     sys.stdout.write('Predicting... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
     de_finder.predict(de_finder.features)
     de_finder.map_predicted_to_ids(what=False)
-    de_finder.save_predictions('/media/darya/Data/LingDir/treebank/saved_predictions.csv')
+    de_finder.save_predictions(output)
 
 
 
