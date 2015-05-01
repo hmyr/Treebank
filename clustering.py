@@ -137,10 +137,11 @@ class DECluster(object):
 
 if __name__ == '__main__':
     in_fn = sys.argv[1]
+    outdir = sys.argv[2]
     n_clusters = 3
     n_test_samples = 45
-    outfn = '/media/darya/Data/LingDir/treebank/clusterized_features_%s_n_clusters_%s_n_test_samples.csv' \
-            % (n_clusters, n_test_samples)
+    outfn = '%sclusterized_features_%s_n_clusters_%s_n_test_samples.csv' \
+            % (outdir, n_clusters, n_test_samples)
 
     decluster = DECluster(in_fn, n_clusters=n_clusters, n_test_samples=n_test_samples)
     decluster.clusterize(n_init=2)
