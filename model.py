@@ -266,25 +266,26 @@ class DEFinder(object):
         with open(feat_names, 'rb') as infile:
             self.feat_names = cPickle.load(infile)
 
+    def run_rfecv(self, n_estimators):
 
-def run_rfecv(de_finder, n_estimators):
-        scoring = de_finder.false_precision_scorer
+        scoring = self.false_precision_scorer
         scoring_short = 'False precision'
-        de_finder.recursive_feature_elimination(scoring=scoring, estimator=classifiers[classifier])
-        de_finder.save_rfecv_plot(classifier, scoring_short, n_estimators)
+        self.recursive_feature_elimination(scoring=scoring, estimator=classifiers[self.classifier])
+        self.save_rfecv_plot(self.classifier, scoring_short, n_estimators)
         sys.stdout.write('False Precision\nBest chosen features: \n')
-        de_finder.show_rfecv_chosen_feature_names()
+        self.show_rfecv_chosen_feature_names()
 
-        scoring = de_finder.false_recall_scorer
+        scoring = self.false_recall_scorer
         scoring_short = 'False recall'
-        de_finder.recursive_feature_elimination(scoring=scoring, estimator=classifiers[classifier])
-        de_finder.save_rfecv_plot(classifier, scoring_short, n_estimators)
+        self.recursive_feature_elimination(scoring=scoring, estimator=classifiers[self.classifier])
+        self.save_rfecv_plot(self.classifier, scoring_short, n_estimators)
         sys.stdout.write('False Recall\nBest chosen features: \n')
-        de_finder.show_rfecv_chosen_feature_names()
+        self.show_rfecv_chosen_feature_names()
         sys.stdout.write('\nAll done!... at %s \n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
 
 
-def _runall(in_fn, classifier, n_estimators=n_estimators, n_b_estimators=None, cv_folds=3):
+
+def _runall(in_fn, classifier, n_estimators=n_estimators, cv_folds=3):
         de_finder = DEFinder()
         de_finder.target, de_finder.features, de_finder.feat_names, de_finder.ids = \
             DECluster.read_features(in_fn, target_feat_name='childCheck', delimiter=',', id_name='id')
@@ -294,8 +295,8 @@ def _runall(in_fn, classifier, n_estimators=n_estimators, n_b_estimators=None, c
         sys.stdout.write('Evaluating model %s... at %s\n' % (classifier, strftime("%a, %d %b %Y %H:%M:%S\n", gmtime())))
 
         de_finder.evaluate_model_cv(folds=cv_folds)
-        de_finder.plot_most_informative_features('%s_most_inform_feats_std_gs_markup_cv_%s_%s_%s_estimators' %
-                                                 (classifier, cv_folds, n_estimators, n_b_estimators),
+        de_finder.plot_most_informative_features('%s_most_inform_feats_std_gs_markup_cv_%s_%s_estimators' %
+                                                 (classifier, cv_folds, n_estimators),
                                                  how_many=100, threshold=0.0)
 
 
