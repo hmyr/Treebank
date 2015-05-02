@@ -19,11 +19,18 @@ where
 
 2) Train model / evaluate model  (model.py)
 
-python model.py -c classifier -o outfilename -m train
+python model.py -c classifier -i inputfile -e n_estimators -t 'train_eval' 
 
-3) Process corpus with trained or loaded model (model.py)
+3) Process corpus with loaded model (model.py)
 
-python model.py -c classifier -o outfilename -m test
+python model.py -i inputfile -m modelfilename -o output -t mode 'test'
+
+
+4) Process corpus with trained model (model.py)
+
+python model.py -i inputfile -m modelfilename -o output -t mode 'train_test'
+
+
 
 
 

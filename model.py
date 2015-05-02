@@ -2,7 +2,8 @@
 
 """
 usage: model.py [-h] [-i [input]] [-c [classifier]] [-e [estimators]]
-                [-m [model]] [-o [output]] [-t [mode]]
+                [-m [model]] [-o [output]] [-t [mode]] [-s [save]]
+                [-n [modelname]]
 
 Implement error prediction on dependency markup.
 
@@ -21,6 +22,10 @@ optional arguments:
                         output file where to save predictions
   -t [mode], --mode [mode]
                         mode to run: train_eval / train_test / test
+  -s [save], --save [save]
+                        save trained model
+  -n [modelname], --modelname [modelname]
+                        trained model name for saving
 """
 
 import cPickle, sys, csv
@@ -320,6 +325,10 @@ def create_parser():
                         help='output file where to save predictions')
     parser.add_argument('-t', '--mode',  metavar='mode', type=str, nargs='?', default='train_eval',
                         help='mode to run: train_eval / train_test / test')
+    parser.add_argument('-s', '--save',  metavar='save', type=str, nargs='?', default=False,
+                        help='save trained model')
+    parser.add_argument('-n', '--modelname',  metavar='modelname', type=str, nargs='?', default=None,
+                        help='trained model name for saving')
     return parser
 
 
@@ -332,7 +341,9 @@ def configure_parser(parser):
         model = args.model
         output = args.output
         mode = args.mode
-        return in_fn, classifier, estimators, model, output, mode
+        save = args.save
+        modelname = args.modelname
+        return in_fn, classifier, estimators, model, output, mode, save, modelname
     except parser.error:
         print >> sys.stdout, parser.print_help(),
         sys.exc_clear()
@@ -344,11 +355,11 @@ if len(sys.argv) < 2:
 
 if __name__ == '__main__':
     parser = create_parser()
-    parser.print_help()
-    in_fn, classifier, estimators, model, output, mode = configure_parser(parser)
+    in_fn, classifier, estimators, model, output, mode, save, modelname = configure_parser(parser)
 
     if mode == 'train_eval':
-        _train_and_eval(in_fn=in_fn, classifier_name=classifier, n_estimators=estimators)
+        de_finder = _train_and_eval(in_fn=in_fn, classifier_name=classifier, n_estimators=estimators)
+        if save: de_finder.save_model(modelname)
 
     elif mode == 'train_test':
         de_finder = _train_and_eval(in_fn=in_fn, classifier_name=classifier, n_estimators=estimators, cv_folds=2)
