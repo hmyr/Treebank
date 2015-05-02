@@ -5,7 +5,7 @@ import csv
 import sys
 
 attribs_to_ignore = ['sentence', 'child', 'head',  'sentence2', 'dep_pair', 'headCheck',
-                     'headToken', 'childToken', 'sent']
+                     'headToken', 'childToken', 'sent', 'dep_pairs_by_POS', 'pairs', 'true_pairs']
 
 attribs_to_ignore = dict([(a, True) for a in attribs_to_ignore])
 
@@ -46,11 +46,10 @@ class SentenceRule(object):
     def __init__(self, sentence):
         self.sentence = sentence
         self.sentence2 = sentence
-        self.pairs = []
-        self.true_pairs = []
-        self.dep_pairs_by_POS = []
 
     def get_pairs(self, childHeadfeauture=None):
+        self.pairs = []
+        self.true_pairs = []
         for head in self.sentence:
             for child in self.sentence2:
                 if childHeadfeauture == 'GS_head':
@@ -83,6 +82,7 @@ class SentenceRule(object):
         """
         self.POSfeature = POSfeature
         self.POSasWhat = POSasWhat
+        self.dep_pairs_by_POS = []
         for head in self.sentence:
             for child in self.sentence2:
                 if self.POSasWhat == 'head':
