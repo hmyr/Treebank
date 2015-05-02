@@ -28,11 +28,12 @@ class Token(object):
         self.lemma = token[8]
         self.lemma = self.lemma
 
-    def get_value(self, value):
+    @staticmethod
+    def get_value(value):
         if value == '' or value == 'h': return 00
         else: return int(value)
-
-    def check_tok(self, value):
+    @staticmethod
+    def check_tok(value):
             a = lambda x: x in ['0', '2', '3', '4', '5']
             if a(value): return True
             else: return False
@@ -102,7 +103,8 @@ class SentenceRule(object):
                             self.dep_pairs_by_POS.append([self.head, self.child])
         return self.dep_pairs_by_POS
 
-    def position(self, head, child):
+    @staticmethod
+    def position(head, child):
         """Вернуть позицию ребёнка по отношению к главному слову
         """
         if head.WID < child.WID:  return 'pre-pos'
@@ -154,34 +156,37 @@ class CommonRule(object):
                 if tag in child_tags: self.__setattr__('CHILD_is_%s' % tag, True)
                 elif tag not in child_tags: self.__setattr__('CHILD_is_%s' % tag, False)
 
-    def check_root(self, what):
+    @staticmethod
+    def check_root(what):
         if what.head == 0 or what.head == '0':
             return True
         else: return False
 
-    def check_is_void(self, what):
+    @staticmethod
+    def check_is_void(what):
         if what == 00: return True
         else: return False
 
-    def position(self, head, child):
+    @staticmethod
+    def position(head, child):
         if head.WID < child.WID:  return 'pre-pos'
         elif head.WID > child.WID: return 'post-pos'
 
     def words_before(self, what=None, bit=None):
         if what is not None:
-            condition = lambda  word, what : word.head == what.WID \
-                                         and (word.WID < self.head.WID and word.WID < self.child.WID
+            condition = lambda word, what: word.head == what.WID \
+                                           and (word.WID < self.head.WID and word.WID < self.child.WID
                                                              and word.head != '' and word.head != 00)
         else:
-            condition = lambda  word, what : (word.WID < self.head.WID and word.WID < self.child.WID
+            condition = lambda word, what: (word.WID < self.head.WID and word.WID < self.child.WID
                                                and word.head != '' and word.head != 00)
         return self.words_at_positions(what=what, bit=bit, condition=condition)
 
     def words_after(self, what=None, bit=None):
         if what is not None:
             condition = lambda word, what: word.head == what.WID \
-                                         and (word.WID > self.head.WID and word.WID > self.child.WID
-                                            and word.head != '' and word.head != 00)
+                                           and (word.WID > self.head.WID and word.WID > self.child.WID
+                                           and word.head != '' and word.head != 00)
         else:
              condition = lambda word, what: (word.WID > self.head.WID and word.WID > self.child.WID
                                                  and word.head != '' and word.head != 00)
@@ -250,7 +255,8 @@ class CommonRule(object):
             return True
         else: return False
 
-    def get_pos(self, token, *args):
+    @staticmethod
+    def get_pos(token, *args):
         for arg in args:
             if arg in token.gram: return True
         else: return False
