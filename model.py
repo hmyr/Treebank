@@ -284,8 +284,7 @@ class DEFinder(object):
         sys.stdout.write('\nAll done!... at %s \n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
 
 
-
-def _runall(in_fn, classifier, n_estimators=n_estimators, cv_folds=3):
+def _train_and_eval(in_fn, classifier, n_estimators=n_estimators, cv_folds=3):
         de_finder = DEFinder()
         de_finder.target, de_finder.features, de_finder.feat_names, de_finder.ids = \
             DECluster.read_features(in_fn, target_feat_name='childCheck', delimiter=',', id_name='id')
@@ -300,17 +299,8 @@ def _runall(in_fn, classifier, n_estimators=n_estimators, cv_folds=3):
                                                  how_many=100, threshold=0.0)
 
 
-def _profile_it(fn, classifier, n_estimators):
-    from pycallgraph import PyCallGraph
-    from pycallgraph.output import GraphvizOutput
-    with PyCallGraph(output=GraphvizOutput()):
-        _runall(fn, classifier, n_estimators)
-
-
-if __name__ == '__main__':
+def _load_and_predict(modelpath=sys.argv[1], output=sys.argv[2], in_fn=sys.argv[3]):
     de_finder = DEFinder()
-    modelpath = sys.argv[1]
-    output = sys.argv[2]
     sys.stdout.write('Loading data... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
     de_finder.load_model(modelpath, modelpath + '.features')
 
@@ -321,6 +311,18 @@ if __name__ == '__main__':
     de_finder.predict(de_finder.features)
     de_finder.map_predicted_to_ids(what=False)
     de_finder.save_predictions(output)
+
+
+def _profile_it(fn, classifier, n_estimators):
+    from pycallgraph import PyCallGraph
+    from pycallgraph.output import GraphvizOutput
+    with PyCallGraph(output=GraphvizOutput()):
+        _train_and_eval(fn, classifier, n_estimators)
+
+
+if __name__ == '__main__':
+    _train_and_eval(in_fn=sys.argv[1], classifier='forest', n_estimators=400)
+
 
 
 
