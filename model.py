@@ -1,5 +1,28 @@
 # -*- coding: utf-8 -*-
 
+"""
+usage: model.py [-h] [-i [input]] [-c [classifier]] [-e [estimators]]
+                [-m [model]] [-o [output]] [-t [mode]]
+
+Implement error prediction on dependency markup.
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -i [input], --input [input]
+                        input file with corpus
+  -c [classifier], --classifier [classifier]
+                        classifier used, available: forest, tree,
+                        gradient_bagging, forest_bagging, forest_with_coef
+  -e [estimators], --estimators [estimators]
+                        number of estimators for tree/forest classifiers
+  -m [model], --model [model]
+                        file with trained classification model
+  -o [output], --output [output]
+                        output file where to save predictions
+  -t [mode], --mode [mode]
+                        mode to run: train_eval / train_test / test
+"""
+
 import cPickle, sys, csv
 from sklearn.ensemble import RandomForestClassifier, BaggingClassifier, GradientBoostingClassifier
 
@@ -16,7 +39,6 @@ from clustering import DECluster
 from collections import defaultdict
 import argparse
 
-in_fn = sys.argv[1]
 
 n_estimators = 400
 n_b_estimators = 10
@@ -254,6 +276,7 @@ def _train_and_eval(in_fn, classifier_name, n_estimators=n_estimators, cv_folds=
         de_finder.plot_most_informative_features('%s_most_inform_feats_std_gs_markup_cv_%s_%s_estimators' %
                                                  (classifier_name, cv_folds, n_estimators),
                                                  how_many=100, threshold=0.0)
+        return de_finder
 
 
 def _load_and_predict(modelpath, output, in_fn):
@@ -282,8 +305,59 @@ def _profile_it(fn, classifier, n_estimators):
         _train_and_eval(fn, classifier, n_estimators)
 
 
+def create_parser():
+    parser = argparse.ArgumentParser(description='Implement error prediction on dependency markup.')
+    parser.add_argument('-i', '--input', metavar='input', type=str, nargs='?',
+                        help='input file with corpus')
+    parser.add_argument('-c', '--classifier', metavar='classifier', type=str, nargs='?', default='forest',
+                        help='classifier used, available: forest, tree, gradient_bagging, '
+                             'forest_bagging, forest_with_coef')
+    parser.add_argument('-e', '--estimators', metavar='estimators', type=int, nargs='?', default=100,
+                        help='number of estimators for tree/forest classifiers')
+    parser.add_argument('-m', '--model', metavar='model', type=str, nargs='?', default=None,
+                        help='file with trained classification model')
+    parser.add_argument('-o', '--output',  metavar='output', type=str, nargs='?', default=None,
+                        help='output file where to save predictions')
+    parser.add_argument('-t', '--mode',  metavar='mode', type=str, nargs='?', default='train_eval',
+                        help='mode to run: train_eval / train_test / test')
+    return parser
+
+
+def configure_parser(parser):
+    try:
+        args = parser.parse_args()
+        in_fn = args.input
+        classifier = args.classifier
+        estimators = args.estimators
+        model = args.model
+        output = args.output
+        mode = args.mode
+        return in_fn, classifier, estimators, model, output, mode
+    except parser.error:
+        print >> sys.stdout, parser.print_help(),
+        sys.exc_clear()
+
+
+if len(sys.argv) < 2:
+        sys.stderr.write('\n%s\n' % __doc__)
+        sys.exc_clear()
+
 if __name__ == '__main__':
-    _train_and_eval(in_fn=sys.argv[1], classifier_name='forest_with_coef', n_estimators=400)
+    parser = create_parser()
+    parser.print_help()
+    in_fn, classifier, estimators, model, output, mode = configure_parser(parser)
+
+    if mode == 'train_eval':
+        _train_and_eval(in_fn=in_fn, classifier_name=classifier, n_estimators=estimators)
+
+    elif mode == 'train_test':
+        de_finder = _train_and_eval(in_fn=in_fn, classifier_name=classifier, n_estimators=estimators, cv_folds=2)
+        de_finder.predict(samples=de_finder.features)
+        de_finder.save_predictions(output)
+
+    elif mode == 'test':
+        _load_and_predict(modelpath=model, output=output, in_fn=in_fn)
+
 
 
 
