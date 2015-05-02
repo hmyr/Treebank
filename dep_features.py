@@ -111,15 +111,16 @@ class SentenceRule(object):
         elif head.WID > child.WID: return 'post-pos'
 
 
-class CommonRule(object):
+class CommonRule(SentenceRule):
     """Класс для описания связи <head - child> из данных типа <SentenceRule>."""
-    def __init__(self, dep_pair, tags=None):
+    def __init__(self, dep_pair, sentence, tags=None):
+        SentenceRule.__init__(self, sentence)
         self.dep_pair = dep_pair
         self.head, self.child = self.dep_pair
         self.id = '%s.%s.%s' % (self.head.SID, self.head.WID, self.child.WID)
         self.headToken = self.head.token
         self.childToken = self.child.token
-        self.sentence = self.head.sent
+        self.sentence = sentence
         self.child_post_pos = self.check_position(what='post-pos')
         self.child_pre_pos = self.check_position(what='pre-pos')
         self.distance_in_words = self.distance()
@@ -142,6 +143,8 @@ class CommonRule(object):
         self.head_is_smth_else_child = self.check_for_head(self.head)
         self.head_is_root = self.check_root(self.head)
         self.child_is_root = self.check_root(self.child)
+        self.has_punct_between = self.pos_between(bit=True, pos='pnt')
+        self.has_fin_between = self.pos_between(bit=True, pos='fin')
         self.childCheck = self.child.check
         self.headCheck = self.head.check
         if tags is not None:
@@ -209,6 +212,17 @@ class CommonRule(object):
                                                 and word.head != '' and word.head != 00)
         return self.words_at_positions(what=what, bit=bit, condition=condition)
 
+    def pos_between(self, bit=None, pos=None):
+        words_between = self.words_between(bit=None)
+        pos_list = []
+        for word in list(words_between):
+            if pos in word.gram:
+                pos_list.append(word)
+        if bit is None:
+            return pos_list
+        else:
+            return True if len(pos_list) > 0 else False
+
     def words_dependencies(self, what=None, bit=None, how=None):
         condition = lambda  word: word.head == what.WID
         if how == 'between':
@@ -217,13 +231,17 @@ class CommonRule(object):
             words = self.words_after(what=what)
         elif how == 'before':
             words = self.words_before(what=what)
+        else: words = []
         words = [word for word in words if condition(word)]
-        if words != [] and bit is True: return True
-        elif words != [] and bit is None: return words
-        else: return False
+        if words != [] and bit is True:
+            return True
+        elif words != [] and bit is None:
+            return words
+        else:
+            return False
 
     def sentence_len_chars(self):
-        condition  = lambda  x: 1 > 0
+        condition = lambda x: 1 > 0
         return self.len_chars(condition=condition)
 
     def len_chars(self, condition=None):
@@ -289,14 +307,13 @@ class ChildRule(CommonRule):
                 elif tag not in what_tags: self.__setattr__('%s_is_%s' % (what, tag), False)
 
 
-
 def read_file(filename, SyntAutom=None, tags=None):
     with open(filename, 'rb') as infile:
         csv_reader = csv.DictReader(infile, delimiter=';')
         cur_sent_id = None
         results = dict()
-        tags = set()
-        links = set()
+        tags_set = list()
+        links = list()
         for row in csv_reader:
             if not row['SID']:
                     row['SID'] = cur_sent_id
@@ -304,33 +321,30 @@ def read_file(filename, SyntAutom=None, tags=None):
                     cur_sent_id = row['SID']
             if cur_sent_id not in results:
                     results[cur_sent_id] = []
-            if SyntAutom is not None:
-                    if not row['SA/Check']: check = 1
-                    else: check = row['SA/Check']
-                    results[cur_sent_id].append([[word.decode('cp1251') for word in row['Sent'].split()], row['WID'],
+
+            if not row['SA/Check']: check = 1
+            else: check = row['SA/Check']
+            results[cur_sent_id].append([[word.decode('cp1251') for word in row['Sent'].split()], row['WID'],
                                                  row['Token'].decode('cp1251'),
                                                  row['GS/Head'], row['SA/Head'], row['SA/New Head'],
                                                  check, row['SA/Gramm'], row['Lemma'].decode('cp1251')])
             if tags is True:
                 for tag in row['SA/Gramm'].split(','):
-                    if tag not in tags and tag != '':
-                        tags.update(tags)
+                    if tag not in tags_set and tag != '':
+                        tags_set.append(tag)
                 if row['Type'] not in links:
-                    links.update(row['Type'])
+                    links.append(row['Type'])
 
-    if len(tags) > 0: return results, tags, links
+    if len(tags_set) > 0: return results, tags_set, links
     else: return results
 
 
 def build_features(in_fn, param='all'):
-
     results, tags, links = read_file(in_fn, tags=True)
     token_sentences = [[Token(feat, sent) for feat in results[sent]] for n, sent in enumerate(results)]
-
-    genius_move = [CommonRule(dep_pair, tags)
+    genius_move = [CommonRule(dep_pair=dep_pair, tags=tags, sentence=sentence)
                    for sentence in token_sentences
                    for dep_pair in SentenceRule(sentence).get_pairs(param)]
-
     return genius_move
 
 
@@ -349,17 +363,18 @@ def save_extracted_feats(outfn, outdir, results):
                                               if condition(a, attribs_to_ignore)]) + '\n')
 
 
-def _profile_it(in_fn, featsdir, param, docname='out_feats_profile.csv'):
+def _profile_it(in_fn, featsdir, param, docname):
     import cProfile
     import pstats
     from pycallgraph import PyCallGraph
     from pycallgraph.output import GraphvizOutput
 
-    cProfile.run("build_features(%s, param='%s')" % in_fn, param, 'cProfile.tmp')
+    cProfile.run("build_features('%s', param='%s')" % (in_fn, param), 'cProfile.tmp')
     c = pstats.Stats('cProfile.tmp')
-    c.sort_stats('ncalls').print_stats(50)
+    c.sort_stats('tottime').print_stats(50)
     with PyCallGraph(output=GraphvizOutput()):
-            build_features(in_fn=in_fn, param=param)
+        results = build_features(in_fn=in_fn, param=param)
+        save_extracted_feats(outdir=featsdir, outfn=docname, results=results)
 
 
 if __name__ == '__main__':
