@@ -46,26 +46,27 @@ class SentenceRule(object):
     def __init__(self, sentence):
         self.sentence = sentence
         self.sentence2 = sentence
-
-    def get_pairs(self, childHeadfeauture=None):
         self.pairs = []
         self.true_pairs = []
-        for self.head in self.sentence:
-            for self.child in self.sentence2:
+        self.dep_pairs_by_POS = []
+
+    def get_pairs(self, childHeadfeauture=None):
+        for head in self.sentence:
+            for child in self.sentence2:
                 if childHeadfeauture == 'GS_head':
-                    if self.head.WID == self.child.GS_head:
-                        self.pairs.append([self.head, self.child])
+                    if head.WID == child.GS_head:
+                        self.pairs.append([head, child])
                 elif childHeadfeauture == 'head':
-                    if self.head.WID == self.child.head and (self.child.head != '' or self.child.head != 00):
-                        self.pairs.append([self.head, self.child])
+                    if head.WID == child.head and (child.head != '' or child.head != 00):
+                        self.pairs.append([head, child])
                 elif childHeadfeauture == 'all':
-                    if self.head.WID == self.child.head and (self.child.head != '' or self.child.head != 00):
-                        self.pairs.append([self.head, self.child])
-                    if self.head.WID == self.child.GS_head:
-                        true_child = self.child
+                    if head.WID == child.head and (child.head != '' or child.head != 00):
+                        self.pairs.append([head, child])
+                    if head.WID == child.GS_head:
+                        true_child = child
                         true_child.check = True
                         true_child.head = true_child.GS_head
-                        pair = [self.head, true_child]
+                        pair = [head, true_child]
                         if pair not in self.pairs:
                             self.true_pairs.append(pair)
         if len(self.true_pairs) > 0:
@@ -80,27 +81,26 @@ class SentenceRule(object):
         """Вернуть все пары зависимостей для указанного грам.тега и роли токена (head / child),
         в одном предложении
         """
-        self.dep_pairs_by_POS = []
         self.POSfeature = POSfeature
         self.POSasWhat = POSasWhat
-        for self.head in self.sentence:
-            for self.child in self.sentence2:
+        for head in self.sentence:
+            for child in self.sentence2:
                 if self.POSasWhat == 'head':
-                    if self.POSfeature in self.head.gram:
-                        if self.child.head == self.head.WID:
-                                self.dep_pairs_by_POS.append([self.head, self.child])
+                    if self.POSfeature in head.gram:
+                        if child.head == head.WID:
+                                self.dep_pairs_by_POS.append([head, child])
                 elif self.POSasWhat == 'child':
-                        if self.POSfeature in self.child.gram:
-                            if self.child.head == self.head.WID:
-                                self.dep_pairs_by_POS.append([self.head, self.child])
+                        if self.POSfeature in child.gram:
+                            if child.head == head.WID:
+                                self.dep_pairs_by_POS.append([head, child])
                 elif self.POSasWhat == 'GS_head':
-                    if self.POSfeature in self.head.gram:
-                        if self.head.WID == self.child.GS_head:
-                           self.dep_pairs_by_POS.append([self.head, self.child])
+                    if self.POSfeature in head.gram:
+                        if head.WID == child.GS_head:
+                           self.dep_pairs_by_POS.append([head, child])
                 elif self.POSasWhat == 'GS_child':
-                    if self.POSfeature in self.child.gram:
-                        if self.head.WID == self.child.GS_head:
-                            self.dep_pairs_by_POS.append([self.head, self.child])
+                    if self.POSfeature in child.gram:
+                        if head.WID == child.GS_head:
+                            self.dep_pairs_by_POS.append([head, child])
         return self.dep_pairs_by_POS
 
     @staticmethod
@@ -200,11 +200,11 @@ class CommonRule(object):
 
     def words_between(self, bit=None,  what=None):
         if what is not None:
-            condition = lambda  word, what : ((word.WID < self.head.WID and word.WID > self.child.WID)
+            condition = lambda word, what: ((word.WID < self.head.WID and word.WID > self.child.WID)
                                             or (word.WID > self.head.WID and word.WID < self.child.WID)
                                             and (word.head == what.WID and word.head != '' and word.head != 00))
         else:
-            condition = lambda  word, what : (((word.WID < self.head.WID and word.WID > self.child.WID)
+            condition = lambda word, what: (((word.WID < self.head.WID and word.WID > self.child.WID)
                                            or (word.WID > self.head.WID and word.WID < self.child.WID))
                                                 and word.head != '' and word.head != 00)
         return self.words_at_positions(what=what, bit=bit, condition=condition)
@@ -227,8 +227,7 @@ class CommonRule(object):
         return self.len_chars(condition=condition)
 
     def len_chars(self, condition=None):
-        return sum([len(word.token) for word in self.sentence if
-                       condition(word)])
+        return sum([len(word.token) for word in self.sentence if condition(word)])
 
     def check_position(self, what=None):
         if what == self.position(self.head, self.child): return True
@@ -290,6 +289,7 @@ class ChildRule(CommonRule):
                 elif tag not in what_tags: self.__setattr__('%s_is_%s' % (what, tag), False)
 
 
+
 def read_file(filename, SyntAutom=None, tags=None):
     with open(filename, 'rb') as infile:
         csv_reader = csv.DictReader(infile, delimiter=';')
@@ -309,8 +309,8 @@ def read_file(filename, SyntAutom=None, tags=None):
                     else: check = row['SA/Check']
                     results[cur_sent_id].append([[word.decode('cp1251') for word in row['Sent'].split()], row['WID'],
                                                  row['Token'].decode('cp1251'),
-                                             row['GS/Head'], row['SA/Head'], row['SA/New Head'],
-                                             check, row['SA/Gramm'], row['Lemma'].decode('cp1251')])
+                                                 row['GS/Head'], row['SA/Head'], row['SA/New Head'],
+                                                 check, row['SA/Gramm'], row['Lemma'].decode('cp1251')])
             if tags is True:
                 for tag in row['SA/Gramm'].split(','):
                     if tag not in tags and tag != '':
@@ -349,17 +349,17 @@ def save_extracted_feats(outfn, outdir, results):
                                               if condition(a, attribs_to_ignore)]) + '\n')
 
 
-def _profile_it(in_fn, featsdir, docname='out_feats_profile.csv'):
+def _profile_it(in_fn, featsdir, param, docname='out_feats_profile.csv'):
     import cProfile
     import pstats
     from pycallgraph import PyCallGraph
     from pycallgraph.output import GraphvizOutput
 
-    cProfile.run('main()', 'cProfile.tmp')
+    cProfile.run("build_features(%s, param='%s')" % in_fn, param, 'cProfile.tmp')
     c = pstats.Stats('cProfile.tmp')
     c.sort_stats('ncalls').print_stats(50)
     with PyCallGraph(output=GraphvizOutput()):
-            build_features(in_fn)
+            build_features(in_fn=in_fn, param=param)
 
 
 if __name__ == '__main__':
