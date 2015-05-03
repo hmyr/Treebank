@@ -359,19 +359,21 @@ if len(sys.argv) < 2:
 
 if __name__ == '__main__':
     parser = create_parser()
-    parser.print_help()
     in_fn, classifier, estimators, model, output, \
                 mode, save, modelname, test_fn = configure_parser(parser)
 
     de_finder = DEFinder()
+
     if mode == 'train_eval':
         de_finder.train_and_eval(in_fn=in_fn, classifier_name=classifier, n_estimators=estimators)
         if save: de_finder.save_model(modelname)
 
     elif mode == 'train_test':
         de_finder.train_and_eval(in_fn=in_fn, classifier_name=classifier, n_estimators=estimators, cv_folds=2)
+        if save: de_finder.save_model(modelname)
 
         sys.stdout.write('Reading corpus... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
+
         de_finder.target, de_finder.features, de_finder.feat_names, de_finder.ids = \
             DECluster.read_features(test_fn, target_feat_name='childCheck', delimiter=',', id_name='id')
         de_finder.predict(samples=de_finder.features)
