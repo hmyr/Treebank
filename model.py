@@ -1,19 +1,21 @@
 # -*- coding: utf-8 -*-
 
 """
-usage: model.py [-h] [-i [input]] [-c [classifier]] [-e [estimators]]
-                [-m [model]] [-o [output]] [-t [mode]] [-s [save]]
-                [-n [modelname]]
+usage: model.py [-h] [-i [input]] [-c [classifier]] [-f [test]]
+                [-e [estimators]] [-m [model]] [-o [output]] [-t [mode]]
+                [-s [save]] [-n [modelname]]
 
 Implement error prediction on dependency markup.
 
 optional arguments:
   -h, --help            show this help message and exit
   -i [input], --input [input]
-                        input file with corpus
+                        train input file with corpus
   -c [classifier], --classifier [classifier]
                         classifier used, available: forest, tree,
                         gradient_bagging, forest_bagging, forest_with_coef
+  -f [test], --test [test]
+                        test input file with corpus
   -e [estimators], --estimators [estimators]
                         number of estimators for tree/forest classifiers
   -m [model], --model [model]
@@ -193,7 +195,7 @@ class DEFinder(object):
             self.classifier, self.features, self.target, cv=folds, scoring=self.false_recall_scorer)
         self.true_recall_scores = cross_validation.cross_val_score(
             self.classifier, self.features, self.target, cv=folds, scoring=self.true_recall_scorer)
-        sys.stdout.write('''\t\tPrecision\t\t\tRecall\nFalse\t%s (+/- %0.2f)\t%s (+/- %0.2f)\t
+        sys.stdout.write('''\t\tPrecision\t\t\tRecall\nFalse\t%s (+/- %0.2f)\t%s (+/- %0.2f)
                             True\t%s (+/- %0.2f)\t%s (+/- %0.2f)\n'''
                          % (round(np.mean(self.false_precision_scores), 3), self.false_precision_scores.std(),
                             round(np.mean(self.false_recall_scores), 3), self.false_recall_scores.std(),
@@ -262,45 +264,43 @@ class DEFinder(object):
         sys.stdout.write('\nAll done!... at %s \n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
 
 
-def _train_and_eval(in_fn, classifier_name, n_estimators=n_estimators, cv_folds=3):
+    def train_and_eval(self, in_fn, classifier_name, n_estimators=n_estimators, cv_folds=3):
         """
+
+        :rtype : DEFinder object
         :param in_fn:
         :param classifier_name:
         :param n_estimators:
         :param cv_folds:
         """
-        de_finder = DEFinder()
-        de_finder.target, de_finder.features, de_finder.feat_names, de_finder.ids = \
+        self.target, de_finder.features, de_finder.feat_names, de_finder.ids = \
             DECluster.read_features(in_fn, target_feat_name='childCheck', delimiter=',', id_name='id')
         sys.stdout.write('Training model... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
 
-        de_finder.train_model(classifier=classifier_name)
+        self.train_model(classifier=classifier_name)
         sys.stdout.write('Evaluating model %s... at %s\n' % (classifier_name, strftime("%a, %d %b %Y %H:%M:%S\n", gmtime())))
 
-        de_finder.evaluate_model_cv(folds=cv_folds)
-        de_finder.plot_most_informative_features('%s_most_inform_feats_std_gs_markup_cv_%s_%s_estimators' %
+        self.evaluate_model_cv(folds=cv_folds)
+        self.plot_most_informative_features('%s_most_inform_feats_std_gs_markup_cv_%s_%s_estimators' %
                                                  (classifier_name, cv_folds, n_estimators),
                                                  how_many=100, threshold=0.0)
-        return de_finder
 
-
-def _load_and_predict(modelpath, output, in_fn):
-    """
-    :param modelpath:
-    :param output:
-    :param in_fn:
-    """
-    de_finder = DEFinder()
-    sys.stdout.write('Loading data... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
-    de_finder.load_model(modelpath, modelpath + '.features')
-
-    de_finder.target, de_finder.features, de_finder.feat_names, de_finder.ids = \
+    def load_and_predict(self, modelpath, output, in_fn):
+        """
+        :param modelpath:
+        :param output:
+        :param in_fn:
+        """
+        sys.stdout.write('Loading data... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
+        self.load_model(modelpath, modelpath + '.features')
+        sys.stdout.write('Reading corpus... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
+        self.target, de_finder.features, de_finder.feat_names, de_finder.ids = \
             DECluster.read_features(in_fn, target_feat_name='childCheck', delimiter=',', id_name='id')
 
-    sys.stdout.write('Predicting... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
-    de_finder.predict(de_finder.features)
-    de_finder.map_predicted_to_ids(what=False)
-    de_finder.save_predictions(output)
+        sys.stdout.write('Predicting... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
+        self.predict(de_finder.features)
+        self.map_predicted_to_ids(what=False)
+        self.save_predictions(output)
 
 
 def _profile_it(fn, classifier, n_estimators):
@@ -313,10 +313,12 @@ def _profile_it(fn, classifier, n_estimators):
 def create_parser():
     parser = argparse.ArgumentParser(description='Implement error prediction on dependency markup.')
     parser.add_argument('-i', '--input', metavar='input', type=str, nargs='?',
-                        help='input file with corpus')
+                        help='train input file with corpus')
     parser.add_argument('-c', '--classifier', metavar='classifier', type=str, nargs='?', default='forest',
                         help='classifier used, available: forest, tree, gradient_bagging, '
                              'forest_bagging, forest_with_coef')
+    parser.add_argument('-f', '--test', metavar='test', type=str, nargs='?', default=None,
+                        help='test input file with corpus')
     parser.add_argument('-e', '--estimators', metavar='estimators', type=int, nargs='?', default=100,
                         help='number of estimators for tree/forest classifiers')
     parser.add_argument('-m', '--model', metavar='model', type=str, nargs='?', default=None,
@@ -325,7 +327,7 @@ def create_parser():
                         help='output file where to save predictions')
     parser.add_argument('-t', '--mode',  metavar='mode', type=str, nargs='?', default='train_eval',
                         help='mode to run: train_eval / train_test / test')
-    parser.add_argument('-s', '--save',  metavar='save', type=str, nargs='?', default=False,
+    parser.add_argument('-s', '--save',  metavar='save', type=bool, nargs='?', default=False,
                         help='save trained model')
     parser.add_argument('-n', '--modelname',  metavar='modelname', type=str, nargs='?', default=None,
                         help='trained model name for saving')
@@ -336,6 +338,7 @@ def configure_parser(parser):
     try:
         args = parser.parse_args()
         in_fn = args.input
+        test_fn = args.test
         classifier = args.classifier
         estimators = args.estimators
         model = args.model
@@ -343,9 +346,9 @@ def configure_parser(parser):
         mode = args.mode
         save = args.save
         modelname = args.modelname
-        return in_fn, classifier, estimators, model, output, mode, save, modelname
+        return in_fn, classifier, estimators, model, output, mode, save, modelname, test_fn
     except parser.error:
-        print >> sys.stdout, parser.print_help(),
+        sys.stderr.write('\n%s\n' % parser.print_help())
         sys.exc_clear()
 
 
@@ -353,21 +356,29 @@ if len(sys.argv) < 2:
         sys.stderr.write('\n%s\n' % __doc__)
         sys.exc_clear()
 
+
 if __name__ == '__main__':
     parser = create_parser()
-    in_fn, classifier, estimators, model, output, mode, save, modelname = configure_parser(parser)
+    parser.print_help()
+    in_fn, classifier, estimators, model, output, \
+                mode, save, modelname, test_fn = configure_parser(parser)
 
+    de_finder = DEFinder()
     if mode == 'train_eval':
-        de_finder = _train_and_eval(in_fn=in_fn, classifier_name=classifier, n_estimators=estimators)
+        de_finder.train_and_eval(in_fn=in_fn, classifier_name=classifier, n_estimators=estimators)
         if save: de_finder.save_model(modelname)
 
     elif mode == 'train_test':
-        de_finder = _train_and_eval(in_fn=in_fn, classifier_name=classifier, n_estimators=estimators, cv_folds=2)
+        de_finder.train_and_eval(in_fn=in_fn, classifier_name=classifier, n_estimators=estimators, cv_folds=2)
+
+        sys.stdout.write('Reading corpus... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
+        de_finder.target, de_finder.features, de_finder.feat_names, de_finder.ids = \
+            DECluster.read_features(test_fn, target_feat_name='childCheck', delimiter=',', id_name='id')
         de_finder.predict(samples=de_finder.features)
         de_finder.save_predictions(output)
 
     elif mode == 'test':
-        _load_and_predict(modelpath=model, output=output, in_fn=in_fn)
+        de_finder.load_and_predict(modelpath=model, output=output, in_fn=in_fn)
 
 
 

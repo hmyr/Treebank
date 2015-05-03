@@ -23,12 +23,12 @@ python model.py -c classifier -i inputfile -e n_estimators -t 'train_eval'
 
 3) Process corpus with loaded model (model.py)
 
-python model.py -i inputfile -m modelfilename -o output -t mode 'test'
+python model.py -i testinputfile -m modelfilename -o output -t 'test'
 
 
 4) Process corpus with trained model (model.py)
 
-python model.py -i inputfile -m modelfilename -o output -t mode 'train_test'
+python model.py -i traininputfile -c classifiername -o output -t 'train_test' -f testinputfile
 
 
 
