@@ -46,6 +46,17 @@ class SentenceRule(object):
     def __init__(self, sentence):
         self.sentence = sentence
         self.sentence2 = sentence
+        self.sentence_length_in_words = len(self.sentence)
+        self.sentence_length_in_chars = self.sentence_len_chars()
+
+    def sentence_len_chars(self):
+        return self.len_chars(condition=None)
+
+    def len_chars(self, condition=None):
+        if condition is None:
+            return sum([len(word.token) for word in self.sentence])
+        else:
+            return sum([len(word.token) for word in self.sentence if condition(word)])
 
     def get_pairs(self, childHeadfeauture=None):
         self.pairs = []
@@ -136,8 +147,8 @@ class CommonRule(SentenceRule):
         self.words_before_are_child_children = self.words_dependencies(what=self.child, how='before', bit=True)
         self.child_head_is_void = self.check_is_void(self.child.head)
         self.head_head_is_void = self.check_is_void(self.head.head)
-        self.sentence_length_in_words = len(self.sentence)
-        self.sentence_length_in_chars = self.sentence_len_chars()
+        self.sentence_length_in_words = self.sentence_length_in_words
+        self.sentence_length_in_chars =  self.sentence_length_in_chars
         self.child_has_children = self.check_for_children(self.child)
         self.head_has_other_children = self.check_for_children(self.head)
         self.head_is_smth_else_child = self.check_for_head(self.head)
@@ -239,13 +250,6 @@ class CommonRule(SentenceRule):
             return words
         else:
             return False
-
-    def sentence_len_chars(self):
-        condition = lambda x: 1 > 0
-        return self.len_chars(condition=condition)
-
-    def len_chars(self, condition=None):
-        return sum([len(word.token) for word in self.sentence if condition(word)])
 
     def check_position(self, what=None):
         if what == self.position(self.head, self.child): return True
