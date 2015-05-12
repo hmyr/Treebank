@@ -92,7 +92,6 @@ class DEFinder(object):
         self.ids = None
         self.feat_names = None
         self.target = None
-        self.bootstrap_informative_features = dict()
         self.false_precision_scorer = make_scorer(precision_score, labels=None, pos_label=0, average='weighted')
         self.true_precision_scorer = make_scorer(precision_score, labels=None, pos_label=1, average='weighted')
         self.false_recall_scorer = make_scorer(recall_score, labels=None, pos_label=0, average='weighted')
@@ -160,7 +159,7 @@ class DEFinder(object):
             plt.savefig('%s.png' % filename, format='png')
 
     def predict(self, samples):
-        self.predictions = [p for p in self.classifier.predict(samples)]
+        self.predictions = (p for p in self.classifier.predict(samples))
 
     def map_predicted_to_ids(self, what=False):
         self.mapped_predictions = defaultdict(list)
@@ -303,11 +302,16 @@ class DEFinder(object):
         self.save_predictions(output)
 
 
-def _profile_it(fn, classifier, n_estimators):
+def _profile_it():
     from pycallgraph import PyCallGraph
     from pycallgraph.output import GraphvizOutput
     with PyCallGraph(output=GraphvizOutput()):
-        _train_and_eval(fn, classifier, n_estimators)
+            parser = create_parser()
+            in_fn, classifier, estimators, model, output, \
+                mode, save, modelname, test_fn = configure_parser(parser)
+
+            de_finder = DEFinder()
+            de_finder.train_and_eval(in_fn=in_fn, classifier_name=classifier, n_estimators=estimators)
 
 
 def create_parser():
