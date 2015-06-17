@@ -31,7 +31,7 @@ optional arguments:
 """
 
 import cPickle, sys, csv
-from sklearn.ensemble import RandomForestClassifier, BaggingClassifier, GradientBoostingClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 
 from sklearn import tree
 from sklearn import cross_validation
@@ -63,21 +63,11 @@ class GradientBoostingClassifierWithCoef(GradientBoostingClassifier):
         self.coef_ = self.feature_importances_
 
 
-classifiers = {'forest': RandomForestClassifier(n_estimators=n_estimators, min_samples_split=2, n_jobs=1),
+classifiers = {'forest': RandomForestClassifier(n_esti
+               mators=n_estimators, min_samples_split=2, n_jobs=1),
                'forest_with_coef': RandomForestClassifierWithCoef(n_estimators=n_estimators,
                                                                   min_samples_split=2, n_jobs=-1),
                'tree': tree.DecisionTreeClassifier(),
-               'forest_bagging': BaggingClassifier(base_estimator=RandomForestClassifierWithCoef
-                                                   (n_estimators=n_estimators, min_samples_split=2, n_jobs=1),
-                                                   n_estimators=n_b_estimators, max_samples=1.0, max_features=1.0,
-                                                   bootstrap=True, bootstrap_features=True, oob_score=False, n_jobs=1,
-                                                   random_state=True, verbose=0),
-               'gradient_bagging': BaggingClassifier(base_estimator=GradientBoostingClassifierWithCoef(loss='deviance',
-                                                     learning_rate=0.1, n_estimators=n_estimators, subsample=1.0,
-                                                     min_samples_split=2, min_samples_leaf=1, max_depth=3),
-                                                     n_estimators=n_b_estimators, max_samples=1.0, max_features=1.0,
-                                                     bootstrap=True, bootstrap_features=True, oob_score=False, n_jobs=1,
-                                                     random_state=True, verbose=0),
                'gradient': GradientBoostingClassifier(loss='deviance', learning_rate=0.1, n_estimators=n_estimators,
                                                       subsample=1.0, min_samples_split=2, min_samples_leaf=1,
                                                       max_depth=3, init=None, random_state=None, max_features=None,
