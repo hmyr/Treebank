@@ -6,8 +6,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sklearn import metrics
 from sklearn.cluster import KMeans
+from sklearn.cluster import AgglomerativeClustering
 from sklearn.decomposition import PCA
-
+from sklearn import manifold
+import itertools
 
 class DECluster(object):
     ids = []
@@ -15,10 +17,6 @@ class DECluster(object):
     def __init__(self, fn, n_test_samples=300,  n_clusters=5, target_feat_name='childCheck', id_name='id', separator=','):
         self.target, self.features, self.feat_names, self.feat_ids = DECluster.read_features(fn)
         self.n_samples, self.n_features = self.features[0:n_test_samples].shape
-        self.target = self.target[0:n_test_samples]
-        self.features = self.features[0:n_test_samples]
-        self.feat_names = self.feat_names[0:n_test_samples]
-        self.feat_ids = self.feat_ids[0:n_test_samples]
         self.n_clusters = n_clusters
         self.sample_size = 3
 
@@ -50,7 +48,7 @@ class DECluster(object):
             else:
                 for row in csv_reader:
                     target_class.append(default_target_value)
-                    if row[id_name]:
+                    if id_name in row:
                         ids.append(row[id_name])
                     feats.append([cls.convert_features(row[fieldname]) for fieldname in feat_names
                                   if fieldname != target_feat_name and fieldname != id_name])
@@ -64,89 +62,49 @@ class DECluster(object):
         elif item == 'False': return False
         elif item.isdigit: return int(item)
 
-    def log_it(self):
-        sys.stderr.write(("\nn_targets: %d, \t n_samples %d, \t n_features %d"
-                          % (self.n_digits, self.n_samples, self.n_features)))
-        sys.stderr.write('\n%s' % str(79 * '_'))
-        sys.stderr.write(('\n% 9s' % 'init\t'
-                          '    time  inertia    homo   compl  v-meas     ARI AMI  silhouette'))
+    def hierarchical_clustering(self, linkage='ward'):
 
-    def bench_k_means(self, estimator, name, data):
-        t0 = time.time()
-        estimator.fit(data)
-        sys.stderr.write(('\n% 9s   %.2fs    %i   %.3f   %.3f   %.3f   %.3f   %.3f'
-                          % (name, ( time.time() - t0), estimator.inertia_,
-                            metrics.homogeneity_score(self.target, estimator.labels_),
-                            metrics.completeness_score(self.target, estimator.labels_),
-                            metrics.v_measure_score(self.target, estimator.labels_),
-                            metrics.adjusted_rand_score(self.target, estimator.labels_),
-                            metrics.adjusted_mutual_info_score(self.target,  estimator.labels_))))
+        sys.stdout.write('\nComputing embedding... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
+        self.features_embedded = manifold.SpectralEmbedding(n_components=2).fit_transform(self.features)
+        sys.stdout.write('\nDone... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
 
-    def evaluate_clust(self, init=None, n_init=10):
-        self.log_it()
-        self.bench_k_means(KMeans(init='k-means++', n_clusters=self.n_clusters, n_init=n_init),
-              name="k-means++", data=self.features)
+        self.clustering = AgglomerativeClustering(linkage=linkage, n_clusters=10)
+        sys.stdout.write('\nPerforming agglomerative clustering... at %s\n' %
+                         strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
+        self.clustering.fit(self.features_embedded)
+        sys.stdout.write('\nDone... at %s' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
+        # self.save_clustering_tree(outfn=outfn)
 
-        self.bench_k_means(KMeans(init='random', n_clusters=self.n_clusters, n_init=n_init),
-              name="random", data=self.features)
-
-        pca = PCA(n_components=self.n_clusters).fit(self.features)
-        self.bench_k_means(KMeans(init=pca.components_, n_clusters=self.n_clusters, n_init=1),
-              name="PCA-based",
-              data=self.features)
-
-    def clusterize(self, init='k-means++', n_init=5):
-        self.reduced_data = PCA(n_components=2).fit_transform(self.features)
-        self.kmeans = KMeans(init=init, n_clusters=self.n_clusters, n_init=n_init)
-        self.kmeans.fit(self.reduced_data)
-
-    def save_clusters(self, outfn):
-        headers = ['cluster', 'id']
+    def save_clustering_tree(self, outfn):
+        headers = ['cluster', 'id', 'parent']
         with open(outfn, 'wb') as outfile:
             outfile.write(';'.join(headers) + '\n')
-            outfile.write('\n'.join('%s;%s' % (str(cl), el_id)
-                                    for cl, el_id in zip(self.kmeans.labels_, self.feat_ids)))
+            for node_id, x in enumerate(self.clustering.children_):
+                left_child = x[0]
+                right_child = x[1]
+                cluster_id = self.clustering.labels_[node_id]
+                outfile.write('\n%s;%s;%s' % (cluster_id, left_child, node_id))
+                outfile.write('\n%s;%s;%s' % (cluster_id, right_child, node_id))
 
-    def plot_clusters(self):
-        h = .02
-        x_min, x_max = self.reduced_data[:, 0].min() + 1, self.reduced_data[:, 0].max() - 1
-        y_min, y_max = self.reduced_data[:, 1].min() + 1, self.reduced_data[:, 1].max() - 1
-        xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
-        Z = self.kmeans.predict(np.c_[xx.ravel(), yy.ravel()])
-        Z = Z.reshape(xx.shape)
-        plt.figure(1)
-        plt.clf()
-        plt.imshow(Z, interpolation='nearest',
-                   extent=(xx.min(), xx.max(), yy.min(), yy.max()),
-                   cmap=plt.cm.Paired,
-                   aspect='auto', origin='lower')
-
-        plt.plot(self.reduced_data[:, 0], self.reduced_data[:, 1], 'k.', markersize=2)
-        centroids = self.kmeans.cluster_centers_
-        plt.scatter(centroids[:, 0], centroids[:, 1],
-                    marker='x', s=169, linewidths=3,
-                    color='w', zorder=10)
-        plt.title('K-means clustering on the RSTB markup  (PCA-reduced data)\n'
-                  'Centroids are marked with white cross')
-        plt.xlim(x_min, x_max)
-        plt.ylim(y_min, y_max)
-        plt.xticks(())
-        plt.yticks(())
-        plt.show()
-
+    def process_clustering_tree(self):
+        for node_id, x in enumerate(self.clustering.children_):
+            left_child = x[0]
+            lch_id = self.feat_names[left_child]
+            right_child = x[1]
+            rch_id = self.feat_names[right_child]
+            cluster_id = self.clustering.labels_[node_id]
+            node_id = self.feat_names[node_id]
 
 if __name__ == '__main__':
     in_fn = sys.argv[1]
     outdir = sys.argv[2]
     n_clusters = 3
-    n_test_samples = 45
-    outfn = '%sclusterized_features_%s_n_clusters_%s_n_test_samples.csv' \
-            % (outdir, n_clusters, n_test_samples)
-
+    n_test_samples = 300
+    outfn = '%sclusterized_features_%s_n_test_samples_Hierarch.csv' % (outdir,  n_test_samples)
     decluster = DECluster(in_fn, n_clusters=n_clusters, n_test_samples=n_test_samples)
-    decluster.clusterize(n_init=2)
-    decluster.plot_clusters()
-    decluster.save_clusters(outfn)
+    decluster.hierarchical_clustering()
+    decluster.process_clustering_tree()
+
 
 
 

@@ -49,6 +49,8 @@ class SentenceRule(object):
         self.sentence_length_in_words = len(self.sentence)
         self.sentence_length_in_chars = self.sentence_len_chars()
 
+    #TODO: preparsing - extract subtrees or NPs, VPs etc, + having WIDs as their attributes
+
     def sentence_len_chars(self):
         return self.len_chars(condition=None)
 
@@ -383,11 +385,20 @@ def _profile_it(in_fn, featsdir, param, docname):
 
 if __name__ == '__main__':
     in_fn = sys.argv[1]
-    featsdir = sys.argv[2]
-    docname = sys.argv[3]
-    param = sys.argv[4]
-    results = build_features(in_fn, param=param)
-    save_extracted_feats(outdir=featsdir, outfn=docname, results=results)
+    # featsdir = sys.argv[2]
+    # docname = sys.argv[3]
+    param = 'all'
+    results, tags, links = read_file(in_fn, tags=True)
+    token_sentences = [[Token(feat, sent) for feat in results[sent]] for n, sent in enumerate(results)]
+
+    genius_move = [CommonRule(dep_pair=dep_pair, tags=tags, sentence=sentence)
+                   for sentence in token_sentences
+                   for dep_pair in SentenceRule(sentence).get_pairs(param)]
+
+    for c in genius_move:
+        print(c.__dict__.keys())
+    # results = build_features(in_fn, param=param)
+    # save_extracted_feats(outdir=featsdir, outfn=docname, results=results)
 
 
 

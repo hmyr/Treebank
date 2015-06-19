@@ -45,9 +45,11 @@ import numpy as np
 from clustering import DECluster
 from collections import defaultdict
 import argparse
+from sklearn.externals.six import StringIO
+import pydot
 
 
-n_estimators = 400
+n_estimators = 10
 n_b_estimators = 10
 
 
@@ -63,8 +65,7 @@ class GradientBoostingClassifierWithCoef(GradientBoostingClassifier):
         self.coef_ = self.feature_importances_
 
 
-classifiers = {'forest': RandomForestClassifier(n_esti
-               mators=n_estimators, min_samples_split=2, n_jobs=1),
+classifiers = {'forest': RandomForestClassifier(n_estimators=n_estimators, min_samples_split=2, n_jobs=1),
                'forest_with_coef': RandomForestClassifierWithCoef(n_estimators=n_estimators,
                                                                   min_samples_split=2, n_jobs=-1),
                'tree': tree.DecisionTreeClassifier(),
@@ -252,7 +253,6 @@ class DEFinder(object):
         self.show_rfecv_chosen_feature_names()
         sys.stdout.write('\nAll done!... at %s \n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
 
-
     def train_and_eval(self, in_fn, classifier_name, n_estimators=n_estimators, cv_folds=3):
         """
 
@@ -352,6 +352,8 @@ if len(sys.argv) < 2:
 
 
 if __name__ == '__main__':
+    dot_data = StringIO()
+    # StringIO.StringIO()
     parser = create_parser()
     in_fn, classifier, estimators, model, output, \
                 mode, save, modelname, test_fn = configure_parser(parser)
@@ -361,6 +363,10 @@ if __name__ == '__main__':
     if mode == 'train_eval':
         de_finder.train_and_eval(in_fn=in_fn, classifier_name=classifier, n_estimators=estimators)
         if save: de_finder.save_model(modelname)
+        tree.export_graphviz(de_finder.classifier, out_file=dot_data)
+        graph = pydot.graph_from_dot_data(dot_data.getvalue())
+        graph.write_pdf("treebank-errors.pdf")
+
 
     elif mode == 'train_test':
         de_finder.train_and_eval(in_fn=in_fn, classifier_name=classifier, n_estimators=estimators, cv_folds=2)
