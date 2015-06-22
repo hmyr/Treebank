@@ -49,7 +49,7 @@ from sklearn.externals.six import StringIO
 import pydot
 
 
-n_estimators = 10
+n_estimators = 100
 n_b_estimators = 10
 
 
@@ -222,6 +222,7 @@ class DEFinder(object):
             plt.savefig('%s.png' % filename, format='png')
 
     def save_model(self, fn):
+        sys.stdout.write('\nSaving model under {}'.format(fn))
         with open(fn, 'wb') as outfile:
             cPickle.dump(self.classifier, outfile)
         with open(fn + '.features', 'wb') as outfile:
@@ -363,9 +364,9 @@ if __name__ == '__main__':
     if mode == 'train_eval':
         de_finder.train_and_eval(in_fn=in_fn, classifier_name=classifier, n_estimators=estimators)
         if save: de_finder.save_model(modelname)
-        tree.export_graphviz(de_finder.classifier, out_file=dot_data)
-        graph = pydot.graph_from_dot_data(dot_data.getvalue())
-        graph.write_pdf("treebank-errors.pdf")
+        # tree.export_graphviz(de_finder.classifier, out_file=dot_data)
+        # graph = pydot.graph_from_dot_data(dot_data.getvalue())
+        # graph.write_pdf("treebank-errors.pdf")
 
 
     elif mode == 'train_test':
