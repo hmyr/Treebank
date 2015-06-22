@@ -3,6 +3,14 @@ import codecs
 import os
 import csv
 import sys
+import logging
+from collections import defaultdict
+
+usage = 'usage: dep_features.py infile features-dir outfile'
+
+csv.field_size_limit(sys.maxint)
+
+logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
 attribs_to_ignore = ['sentence', 'child', 'head',  'sentence2', 'dep_pair', 'headCheck',
                      'headToken', 'childToken', 'sent', 'dep_pairs_by_POS', 'pairs', 'true_pairs']
@@ -11,27 +19,36 @@ attribs_to_ignore = dict([(a, True) for a in attribs_to_ignore])
 
 
 class Token(object):
-    def __init__(self, token, SID):
+    def __init__(self, token, SID, sentences_dict):
         """
+        :param token: dict(WID=row['wordNo'], token=row['token'], head=row['head'],
+                           check=check, gram=row['gram'], lemma=row['lemma'], GS_head=None)
+        :param SID: sentence ID to look up in sentences_dict for
+
         00 in head and check means:
          initial value was '' or 'h'
         """
         self.SID = int(SID)
-        self.sent = token[0]
-        self.WID = int(token[1])
-        self.token = token[2]
-        self.GS_head = self.get_value(token[3])
-        self.head = self.get_value(token[4])
-        self.new_head = token[5]
-        self.check = self.check_tok(token[6])
-        self.gram = token[7]
-        self.lemma = token[8]
-        self.lemma = self.lemma
+        self.sent = sentences_dict[SID]
+        self.WID = int(token['WID'])
+        self.token = token['token']
+        self.GS_head = self.get_value(token['GS_head'], SID, token)
+        self.head = self.get_value(token['head'], SID, token)
+        self.check = self.check_tok(token['check'])
+        self.gram = token['WID']
+        self.lemma = token['lemma']
 
     @staticmethod
-    def get_value(value):
-        if value == '' or value == 'h': return 00
-        else: return int(value)
+    def get_value(value, SID, token):
+        try:
+            if value == '' or value == 'h': return 00
+            elif value is None or value == 'NULL': return None
+            else: return int(value)
+        except Exception, error:
+            logging.warning('Got error: {} on value {}, sent {}'.format(error, value, SID))
+            logging.warning('Token looks like: {}'.format(token))
+            return value
+
     @staticmethod
     def check_tok(value):
             a = lambda x: x in ['0', '2', '3', '4', '5']
@@ -313,27 +330,25 @@ class ChildRule(CommonRule):
                 elif tag not in what_tags: self.__setattr__('%s_is_%s' % (what, tag), False)
 
 
-def read_file(filename, SyntAutom=None, tags=None):
+def read_file(filename, tags=None, delimiter=';'):
     with open(filename, 'rb') as infile:
-        csv_reader = csv.DictReader(infile, delimiter=';')
+        csv_reader = csv.DictReader(infile, delimiter=delimiter)
         cur_sent_id = None
-        results = dict()
+        results = defaultdict(list)
         tags_set = list()
         links = list()
+        sent_dict = defaultdict(list)
         for row in csv_reader:
             if not row['SID']:
                     row['SID'] = cur_sent_id
             else:
                     cur_sent_id = row['SID']
-            if cur_sent_id not in results:
-                    results[cur_sent_id] = []
-
             if not row['SA/Check']: check = 1
             else: check = row['SA/Check']
-            results[cur_sent_id].append([[word.decode('cp1251') for word in row['Sent'].split()], row['WID'],
-                                                 row['Token'].decode('cp1251'),
-                                                 row['GS/Head'], row['SA/Head'], row['SA/New Head'],
-                                                 check, row['SA/Gramm'], row['Lemma'].decode('cp1251')])
+            sent_dict[cur_sent_id].append(row['token'])
+            results[cur_sent_id].append(dict(WID=row['WID'], token=row['Token'], head=row['SA/Head'], check=check,
+                                             gram=row['SA/Gramm'], lemma=row['Lemma'], GS_head=row['GS/Head']))
+
             if tags is True:
                 for tag in row['SA/Gramm'].split(','):
                     if tag not in tags_set and tag != '':
@@ -341,13 +356,66 @@ def read_file(filename, SyntAutom=None, tags=None):
                 if row['Type'] not in links:
                     links.append(row['Type'])
 
-    if len(tags_set) > 0: return results, tags_set, links
-    else: return results
+    return results, tags_set, links, sent_dict
+
+
+def read_it(filename):
+    results = list()
+    links = list()
+    tags_set = list()
+    with open(filename, 'rb') as infile:
+        dialect = csv.Sniffer().sniff(infile.read(1024))
+        delimiter = dialect.delimiter
+        infile.seek(0)
+        csv_reader = csv.DictReader(infile, delimiter=delimiter)
+        headers = csv_reader.fieldnames
+    if 'SID' in headers:
+        results, tags_set, links, sent_dict = read_file(filename, tags=True, delimiter=delimiter)
+    elif 'sentNo' in headers:
+        results, tags_set, links, sent_dict = read_markup(filename, delimiter=delimiter)
+    if not results:
+        logging.error("Couldn't read the file specified ({}). Stopping...".format(filename))
+        sys.exit()
+    return results, tags_set, links, sent_dict
+
+def read_markup(filename, tags=True, delimiter=';'):
+    with open(filename, 'rb') as infile:
+        csv_reader = csv.DictReader(infile, delimiter=delimiter)
+        headers = csv_reader.fieldnames
+        row = dict([(a, headers.index(a)) for a in headers])
+        cur_sent_id = None
+        results = defaultdict(list)
+        tags_set = list()
+        links = list()
+        sent_dict = defaultdict(list)
+        # for row in csv_reader:
+        for line in infile:
+            line = line.strip()
+            line = line.split(delimiter)
+            if not line[row['sentNo']]:
+                    line[row['sentNo']] = cur_sent_id
+            else:
+                    cur_sent_id = line[row['sentNo']]
+            check = 1
+            sent_dict[cur_sent_id].append(line[row['token']])
+            results[cur_sent_id].append(dict(WID=line[row['wordNo']], token=line[row['token']],
+                                                 head=line[row['head']], check=check, gram=line[row['gram']],
+                                                 lemma=line[row['lemma']], GS_head=None))
+            if tags:
+                for tag in line[row['gram']].split(','):
+                    if tag not in tags_set and tag != '':
+                        tags_set.append(tag)
+                if line[row['type']] not in links:
+                    links.append(line[row['type']])
+
+    return results, tags_set, links, sent_dict
 
 
 def build_features(in_fn, param='all'):
-    results, tags, links = read_file(in_fn, tags=True)
-    token_sentences = [[Token(feat, sent) for feat in results[sent]] for n, sent in enumerate(results)]
+    logging.info('Reading file {} '.format(in_fn))
+    results, tags, links, sent_dict = read_it(in_fn)
+    logging.info('Extracting features')
+    token_sentences = [[Token(feat, sent, sent_dict) for feat in results[sent]] for n, sent in enumerate(results)]
     genius_move = [CommonRule(dep_pair=dep_pair, tags=tags, sentence=sentence)
                    for sentence in token_sentences
                    for dep_pair in SentenceRule(sentence).get_pairs(param)]
@@ -355,9 +423,9 @@ def build_features(in_fn, param='all'):
 
 
 def save_extracted_feats(outfn, outdir, results):
+    logging.info('Saving extracted features in {}'.format(outfn))
     condition = lambda x, y: (x not in y)
     separator = ','
-
     with codecs.open(os.path.join(outdir, outfn), 'w') as outfile:
         for n, coup_de_genie in enumerate(results):
                 keys = coup_de_genie.__dict__.keys()
@@ -368,6 +436,9 @@ def save_extracted_feats(outfn, outdir, results):
                                               in zip(keys, values)
                                               if condition(a, attribs_to_ignore)]) + '\n')
 
+def get_features(infile, featsdir, docname, param='all'):
+    results = build_features(infile, param)
+    save_extracted_feats(outdir=featsdir, outfn=docname, results=results)
 
 def _profile_it(in_fn, featsdir, param, docname):
     import cProfile
@@ -384,21 +455,14 @@ def _profile_it(in_fn, featsdir, param, docname):
 
 
 if __name__ == '__main__':
+    if len(sys.argv) < 3:
+        sys.stdout.write('\n{}'.format(usage))
+        sys.exit()
+
     in_fn = sys.argv[1]
-    # featsdir = sys.argv[2]
-    # docname = sys.argv[3]
-    param = 'all'
-    results, tags, links = read_file(in_fn, tags=True)
-    token_sentences = [[Token(feat, sent) for feat in results[sent]] for n, sent in enumerate(results)]
-
-    genius_move = [CommonRule(dep_pair=dep_pair, tags=tags, sentence=sentence)
-                   for sentence in token_sentences
-                   for dep_pair in SentenceRule(sentence).get_pairs(param)]
-
-    for c in genius_move:
-        print(c.__dict__.keys())
-    # results = build_features(in_fn, param=param)
-    # save_extracted_feats(outdir=featsdir, outfn=docname, results=results)
+    featsdir = sys.argv[2]
+    docname = sys.argv[3]
+    get_features(infile=in_fn, featsdir=featsdir, docname=docname, param='head')
 
 
 
