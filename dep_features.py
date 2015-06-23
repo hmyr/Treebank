@@ -1,12 +1,30 @@
 # -*- coding: utf-8 -*-
+"""
+usage: dep_features.py [-h] [-p [param]] [-d [docname]] [-f [featsdir]]
+                       [-i [infile]]
+
+Implement error prediction on dependency markup.
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -p [param], --param [param]
+                        parameter to extract features: for parser markup
+                        (head) / golden standard markup (GS_head) / both (all)
+  -d [docname], --docname [docname]
+                        output filename
+  -f [featsdir], --featsdir [featsdir]
+                        directory where to save extracted features
+  -i [infile], --infile [infile]
+                        csv to extract features from
+"""
 import codecs
 import os
 import csv
 import sys
 import logging
 from collections import defaultdict
+import argparse
 
-usage = 'usage: dep_features.py infile features-dir outfile'
 
 csv.field_size_limit(sys.maxint)
 
@@ -173,8 +191,6 @@ class CommonRule(SentenceRule):
         self.head_is_smth_else_child = self.check_for_head(self.head)
         self.head_is_root = self.check_root(self.head)
         self.child_is_root = self.check_root(self.child)
-        self.has_punct_between = self.pos_between(bit=True, pos='pnt')
-        self.has_fin_between = self.pos_between(bit=True, pos='fin')
         self.childCheck = self.child.check
         self.headCheck = self.head.check
         if tags is not None:
@@ -345,7 +361,7 @@ def read_file(filename, tags=None, delimiter=';'):
                     cur_sent_id = row['SID']
             if not row['SA/Check']: check = 1
             else: check = row['SA/Check']
-            sent_dict[cur_sent_id].append(row['token'])
+            sent_dict[cur_sent_id].append(row['Token'])
             results[cur_sent_id].append(dict(WID=row['WID'], token=row['Token'], head=row['SA/Head'], check=check,
                                              gram=row['SA/Gramm'], lemma=row['Lemma'], GS_head=row['GS/Head']))
 
@@ -363,16 +379,27 @@ def read_it(filename):
     results = list()
     links = list()
     tags_set = list()
+    default_delimiter = ';'
     with open(filename, 'rb') as infile:
-        dialect = csv.Sniffer().sniff(infile.read(1024))
-        delimiter = dialect.delimiter
-        infile.seek(0)
-        csv_reader = csv.DictReader(infile, delimiter=delimiter)
-        headers = csv_reader.fieldnames
+        try:
+            dialect = csv.Sniffer().sniff(infile.read(1024))
+            delimiter = dialect.delimiter
+            infile.seek(0)
+            csv_reader = csv.DictReader(infile, delimiter=delimiter)
+            headers = csv_reader.fieldnames
+        except Exception, error:
+            logging.error('{}. Trying default delimiter...'.format(error))
+            delimiter = default_delimiter
+            headers = infile.readline().split()
     if 'SID' in headers:
         results, tags_set, links, sent_dict = read_file(filename, tags=True, delimiter=delimiter)
     elif 'sentNo' in headers:
         results, tags_set, links, sent_dict = read_markup(filename, delimiter=delimiter)
+    else:
+        try:
+            results, tags_set, links, sent_dict = read_file(filename, tags=True, delimiter=delimiter)
+        except Exception, error:
+            logging.error('{}'.format(error))
     if not results:
         logging.error("Couldn't read the file specified ({}). Stopping...".format(filename))
         sys.exit()
@@ -388,7 +415,6 @@ def read_markup(filename, tags=True, delimiter=';'):
         tags_set = list()
         links = list()
         sent_dict = defaultdict(list)
-        # for row in csv_reader:
         for line in infile:
             line = line.strip()
             line = line.split(delimiter)
@@ -407,7 +433,6 @@ def read_markup(filename, tags=True, delimiter=';'):
                         tags_set.append(tag)
                 if line[row['type']] not in links:
                     links.append(line[row['type']])
-
     return results, tags_set, links, sent_dict
 
 
@@ -454,15 +479,42 @@ def _profile_it(in_fn, featsdir, param, docname):
         save_extracted_feats(outdir=featsdir, outfn=docname, results=results)
 
 
+
+
+def create_parser():
+    parser = argparse.ArgumentParser(description='Implement error prediction on dependency markup.')
+    parser.add_argument('-p', '--param', metavar='param', type=str, nargs='?', default='all',
+                        help='parameter to extract features: for parser markup (head) /'
+                             ' golden standard markup (GS_head) / both (all)')
+    parser.add_argument('-d', '--docname', metavar='docname', type=str, nargs='?', default=None,
+                        help='output filename')
+    parser.add_argument('-f', '--featsdir', metavar='featsdir', type=str, nargs='?', default=100,
+                        help='directory where to save extracted features')
+    parser.add_argument('-i', '--infile', metavar='infile', type=str, nargs='?', default=None,
+                        help='csv to extract features from')
+    return parser
+
+
+def configure_parser(parser):
+    try:
+        args = parser.parse_args()
+        infile = args.infile
+        featsdir = args.featsdir
+        docname = args.docname
+        param = args.param
+        return infile, featsdir, docname, param
+    except parser.error:
+        sys.stderr.write('\n%s\n' % parser.print_help())
+        sys.exc_clear()
+
 if __name__ == '__main__':
+    parser = create_parser()
     if len(sys.argv) < 3:
-        sys.stdout.write('\n{}'.format(usage))
+        parser.print_help()
         sys.exit()
 
-    in_fn = sys.argv[1]
-    featsdir = sys.argv[2]
-    docname = sys.argv[3]
-    get_features(infile=in_fn, featsdir=featsdir, docname=docname, param='head')
+    infile, featsdir, docname, param = configure_parser(parser)
+    get_features(infile=infile, featsdir=featsdir, docname=docname, param=param)
 
 
 
