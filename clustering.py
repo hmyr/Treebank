@@ -1,27 +1,28 @@
 # -*- coding: utf-8 -*-
 
-import sys, csv, time
+import sys, csv
 from time import gmtime, strftime
-import matplotlib.pyplot as plt
 import numpy as np
-from sklearn import metrics
-from sklearn.cluster import KMeans
 from sklearn.cluster import AgglomerativeClustering
-from sklearn.decomposition import PCA
 from sklearn import manifold
-import itertools
+import logging
+
+
+csv.field_size_limit(sys.maxint)
+
+logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
 class DECluster(object):
     ids = []
 
-    def __init__(self, fn, n_test_samples=300,  n_clusters=5, target_feat_name='childCheck', id_name='id', separator=','):
+    def __init__(self, fn, n_test_samples=300,  n_clusters=5):
         self.target, self.features, self.feat_names, self.feat_ids = DECluster.read_features(fn)
         self.n_samples, self.n_features = self.features[0:n_test_samples].shape
         self.n_clusters = n_clusters
         self.sample_size = 3
 
     @classmethod
-    def read_features(cls, fn,  target_feat_name='childCheck', id_name='id', delimiter=';', default_target_value=False):
+    def read_features(cls, fn,  target_feat_name='childCheck', id_name='id', default_target_value=False):
         """
         'id' reads as follows: head.SID, head.WID, child.WID)
         :param fn:
@@ -33,8 +34,17 @@ class DECluster(object):
         feats = []
         target_class = []
         ids = []
+        default_delimiter = ';'
         with open(fn, 'rb') as infile:
-            csv_reader = csv.DictReader(infile, delimiter=delimiter)
+            try:
+                dialect = csv.Sniffer().sniff(infile.read(1024))
+                delimiter = dialect.delimiter
+                infile.seek(0)
+                csv_reader = csv.DictReader(infile, delimiter=delimiter)
+            except Exception, error:
+                logging.error('{}. Trying default delimiter...'.format(error))
+                delimiter = default_delimiter
+                csv_reader = csv.DictReader(infile, delimiter=delimiter)
             feat_names = csv_reader.fieldnames
             if target_feat_name in feat_names:
                 for row in csv_reader:
