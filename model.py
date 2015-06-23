@@ -45,11 +45,53 @@ import numpy as np
 from clustering import DECluster
 from collections import defaultdict
 import argparse
-from sklearn.externals.six import StringIO
-import pydot
+
+def create_parser():
+    parser = argparse.ArgumentParser(description='Implement error prediction on dependency markup.')
+    parser.add_argument('-i', '--input', metavar='input', type=str, nargs='?',
+                        help='train input file with corpus')
+    parser.add_argument('-c', '--classifier', metavar='classifier', type=str, nargs='?', default='forest',
+                        help='classifier used, available: forest, tree, gradient_bagging, '
+                             'forest_bagging, forest_with_coef')
+    parser.add_argument('-f', '--test', metavar='test', type=str, nargs='?', default=None,
+                        help='test input file with corpus')
+    parser.add_argument('-e', '--estimators', metavar='estimators', type=int, nargs='?', default=100,
+                        help='number of estimators for tree/forest classifiers')
+    parser.add_argument('-m', '--model', metavar='model', type=str, nargs='?', default=None,
+                        help='file with trained classification model')
+    parser.add_argument('-o', '--output',  metavar='output', type=str, nargs='?', default=None,
+                        help='output file where to save predictions')
+    parser.add_argument('-t', '--mode',  metavar='mode', type=str, nargs='?', default='train_eval',
+                        help='mode to run: train_eval / train_test / test')
+    parser.add_argument('-s', '--save',  metavar='save', type=bool, nargs='?', default=False,
+                        help='save trained model')
+    parser.add_argument('-n', '--modelname', metavar='modelname', type=str, nargs='?', default=None,
+                        help='trained model name for saving')
+    return parser
 
 
-n_estimators = 100
+def configure_parser(parser):
+    try:
+        args = parser.parse_args()
+        in_fn = args.input
+        test_fn = args.test
+        classifier = args.classifier
+        estimators = args.estimators
+        model = args.model
+        output = args.output
+        mode = args.mode
+        save = bool(args.save)
+        modelname = args.modelname
+        return in_fn, classifier, estimators, model, output, mode, save, modelname, test_fn
+    except parser.error:
+        sys.stderr.write('\n%s\n' % parser.print_help())
+        sys.exc_clear()
+
+
+parser = create_parser()
+in_fn, classifier, n_estimators, model, output, \
+                mode, save, modelname, test_fn = configure_parser(parser)
+
 n_b_estimators = 10
 
 
@@ -264,7 +306,7 @@ class DEFinder(object):
         :param cv_folds:
         """
         self.target, de_finder.features, de_finder.feat_names, de_finder.ids = \
-            DECluster.read_features(in_fn, target_feat_name='childCheck', delimiter=',', id_name='id')
+            DECluster.read_features(in_fn, target_feat_name='childCheck', id_name='id')
         sys.stdout.write('Training model... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
 
         self.train_model(classifier=classifier_name)
@@ -285,7 +327,7 @@ class DEFinder(object):
         self.load_model(modelpath, modelpath + '.features')
         sys.stdout.write('Reading corpus... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
         self.target, de_finder.features, de_finder.feat_names, de_finder.ids = \
-            DECluster.read_features(in_fn, target_feat_name='childCheck', delimiter=',', id_name='id')
+            DECluster.read_features(in_fn, target_feat_name='childCheck', id_name='id')
 
         sys.stdout.write('Predicting... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
         self.predict(de_finder.features)
@@ -305,47 +347,6 @@ def _profile_it():
             de_finder.train_and_eval(in_fn=in_fn, classifier_name=classifier, n_estimators=estimators)
 
 
-def create_parser():
-    parser = argparse.ArgumentParser(description='Implement error prediction on dependency markup.')
-    parser.add_argument('-i', '--input', metavar='input', type=str, nargs='?',
-                        help='train input file with corpus')
-    parser.add_argument('-c', '--classifier', metavar='classifier', type=str, nargs='?', default='forest',
-                        help='classifier used, available: forest, tree, gradient_bagging, '
-                             'forest_bagging, forest_with_coef')
-    parser.add_argument('-f', '--test', metavar='test', type=str, nargs='?', default=None,
-                        help='test input file with corpus')
-    parser.add_argument('-e', '--estimators', metavar='estimators', type=int, nargs='?', default=100,
-                        help='number of estimators for tree/forest classifiers')
-    parser.add_argument('-m', '--model', metavar='model', type=str, nargs='?', default=None,
-                        help='file with trained classification model')
-    parser.add_argument('-o', '--output',  metavar='output', type=str, nargs='?', default=None,
-                        help='output file where to save predictions')
-    parser.add_argument('-t', '--mode',  metavar='mode', type=str, nargs='?', default='train_eval',
-                        help='mode to run: train_eval / train_test / test')
-    parser.add_argument('-s', '--save',  metavar='save', type=bool, nargs='?', default=False,
-                        help='save trained model')
-    parser.add_argument('-n', '--modelname',  metavar='modelname', type=str, nargs='?', default=None,
-                        help='trained model name for saving')
-    return parser
-
-
-def configure_parser(parser):
-    try:
-        args = parser.parse_args()
-        in_fn = args.input
-        test_fn = args.test
-        classifier = args.classifier
-        estimators = args.estimators
-        model = args.model
-        output = args.output
-        mode = args.mode
-        save = args.save
-        modelname = args.modelname
-        return in_fn, classifier, estimators, model, output, mode, save, modelname, test_fn
-    except parser.error:
-        sys.stderr.write('\n%s\n' % parser.print_help())
-        sys.exc_clear()
-
 
 if len(sys.argv) < 2:
         sys.stderr.write('\n%s\n' % __doc__)
@@ -353,21 +354,12 @@ if len(sys.argv) < 2:
 
 
 if __name__ == '__main__':
-    dot_data = StringIO()
-    # StringIO.StringIO()
-    parser = create_parser()
-    in_fn, classifier, estimators, model, output, \
-                mode, save, modelname, test_fn = configure_parser(parser)
+
 
     de_finder = DEFinder()
-
     if mode == 'train_eval':
         de_finder.train_and_eval(in_fn=in_fn, classifier_name=classifier, n_estimators=estimators)
         if save: de_finder.save_model(modelname)
-        # tree.export_graphviz(de_finder.classifier, out_file=dot_data)
-        # graph = pydot.graph_from_dot_data(dot_data.getvalue())
-        # graph.write_pdf("treebank-errors.pdf")
-
 
     elif mode == 'train_test':
         de_finder.train_and_eval(in_fn=in_fn, classifier_name=classifier, n_estimators=estimators, cv_folds=2)
@@ -376,7 +368,7 @@ if __name__ == '__main__':
         sys.stdout.write('Reading corpus... at %s\n' % strftime("%a, %d %b %Y %H:%M:%S\n", gmtime()))
 
         de_finder.target, de_finder.features, de_finder.feat_names, de_finder.ids = \
-            DECluster.read_features(test_fn, target_feat_name='childCheck', delimiter=',', id_name='id')
+            DECluster.read_features(test_fn, target_feat_name='childCheck',id_name='id')
         de_finder.predict(samples=de_finder.features)
         de_finder.save_predictions(output)
 
